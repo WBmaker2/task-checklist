@@ -258,11 +258,13 @@
           padding: 12,
           boxShadow: T.shadowLg,
           zIndex: 200,
-          width: 260
+          width: "min(248px, calc(100vw - 56px))",
+          boxSizing: "border-box",
+          overflow: "hidden"
         }
       },
       /* @__PURE__ */ React.createElement("div", { style: { fontSize: 12, fontWeight: 600, color: T.textMuted, marginBottom: 8 } }, "아이콘 선택"),
-      /* @__PURE__ */ React.createElement("div", { style: { display: "grid", gridTemplateColumns: "repeat(9,1fr)", gap: 4 } }, ICON_OPTIONS.map((ic, i) => /* @__PURE__ */ React.createElement(
+      /* @__PURE__ */ React.createElement("div", { style: { display: "grid", gridTemplateColumns: "repeat(8,minmax(0,1fr))", gap: 4 } }, ICON_OPTIONS.map((ic, i) => /* @__PURE__ */ React.createElement(
         "button",
         {
           key: i,
@@ -271,8 +273,8 @@
             setOpen(false);
           },
           style: {
-            width: 26,
-            height: 26,
+            width: "100%",
+            aspectRatio: "1 / 1",
             borderRadius: 6,
             border: value === ic ? `2px solid ${T.accent}` : "1px solid transparent",
             background: value === ic ? `${T.accentLight}44` : "transparent",
