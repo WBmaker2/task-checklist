@@ -1,4 +1,5 @@
 (function() {
+  const APP_VERSION = "v1.0.0";
   const { SAMPLE_TASKS, DEFAULT_CATEGORIES } = window.AppConstants;
   const T = window.AppTheme;
   const { load, save } = window.AppUtils;
@@ -456,13 +457,60 @@
       restoreNow: () => performRestore({ confirm: true, reason: "manual" }),
       refreshMeta: () => refreshServerMeta(syncUserRef.current)
     };
-    const reset = () => {
-      if (window.confirm("모든 데이터를 초기화하시겠습니까? 이 작업은 되돌릴 수 없습니다.")) {
-        setTasks(SAMPLE_TASKS);
-        setCats(DEFAULT_CATEGORIES);
-        setChecks({});
+    const syncIndicator = (() => {
+      if (!syncServiceState.ok) {
+        return {
+          label: "동기화 비활성",
+          bg: T.surfaceAlt,
+          border: T.border,
+          color: T.textMuted,
+          dot: T.textMuted
+        };
       }
-    };
+      if (!syncUser) {
+        return {
+          label: "클라우드 미로그인",
+          bg: T.surfaceAlt,
+          border: T.border,
+          color: T.textMuted,
+          dot: T.textMuted
+        };
+      }
+      if (syncStatus.busy) {
+        return {
+          label: "클라우드 동기화 중",
+          bg: "#eff6ff",
+          border: "#bfdbfe",
+          color: "#1d4ed8",
+          dot: "#2563eb"
+        };
+      }
+      if (serverAhead) {
+        return {
+          label: "서버 최신 감지",
+          bg: "#fff7ed",
+          border: "#fed7aa",
+          color: "#9a3412",
+          dot: "#c2410c"
+        };
+      }
+      if (syncMeta.dirty) {
+        return {
+          label: "동기화 대기중",
+          bg: "#eff6ff",
+          border: "#bfdbfe",
+          color: "#1d4ed8",
+          dot: "#2563eb"
+        };
+      }
+      return {
+        label: "동기화 완료",
+        bg: "#ecfdf3",
+        border: "#86efac",
+        color: "#166534",
+        dot: "#16a34a"
+      };
+    })();
     return /* @__PURE__ */ React.createElement("div", { style: { minHeight: "100vh", background: T.bg, fontFamily: "'Noto Sans KR',sans-serif", color: T.text } }, /* @__PURE__ */ React.createElement(
       "div",
       {
@@ -479,23 +527,38 @@
           alignItems: "center"
         }
       },
-      /* @__PURE__ */ React.createElement("div", { style: { display: "flex", alignItems: "center", gap: 8 } }, /* @__PURE__ */ React.createElement("span", { style: { fontSize: 24 } }, "📋"), /* @__PURE__ */ React.createElement("span", { style: { fontFamily: "Outfit", fontWeight: 800, fontSize: 16, color: T.text, letterSpacing: -0.5 } }, "학급 업무 체크리스트")),
+      /* @__PURE__ */ React.createElement("div", { style: { display: "flex", alignItems: "center", gap: 8 } }, /* @__PURE__ */ React.createElement("span", { style: { fontSize: 24 } }, "📋"), /* @__PURE__ */ React.createElement("div", { style: { display: "flex", alignItems: "baseline", gap: 6 } }, /* @__PURE__ */ React.createElement("span", { style: { fontFamily: "Outfit", fontWeight: 800, fontSize: 16, color: T.text, letterSpacing: -0.5 } }, "학급 업무 체크리스트"), /* @__PURE__ */ React.createElement("span", { style: { fontSize: 10, fontWeight: 700, color: T.textMuted, letterSpacing: 0.2 } }, APP_VERSION))),
       /* @__PURE__ */ React.createElement(
-        "button",
+        "div",
         {
-          onClick: reset,
           style: {
-            padding: "6px 12px",
-            borderRadius: 16,
-            border: `1px solid ${T.border}`,
-            background: T.surface,
+            padding: "6px 10px",
+            borderRadius: 999,
+            border: `1px solid ${syncIndicator.border}`,
+            background: syncIndicator.bg,
             fontSize: 11,
-            color: T.textMuted,
-            cursor: "pointer",
-            fontFamily: "'Noto Sans KR'"
+            color: syncIndicator.color,
+            fontWeight: 700,
+            display: "inline-flex",
+            alignItems: "center",
+            gap: 6,
+            fontFamily: "'Noto Sans KR'",
+            whiteSpace: "nowrap"
           }
         },
-        "🔄 초기화"
+        /* @__PURE__ */ React.createElement(
+          "span",
+          {
+            style: {
+              width: 6,
+              height: 6,
+              borderRadius: "50%",
+              background: syncIndicator.dot,
+              display: "inline-block"
+            }
+          }
+        ),
+        syncIndicator.label
       )
     ), /* @__PURE__ */ React.createElement("div", { style: { maxWidth: 560, margin: "0 auto", padding: "20px 16px 100px" } }, page === "dashboard" && /* @__PURE__ */ React.createElement(Dashboard, { tasks, cats, checks, onToggle: toggle }), page === "checklist" && /* @__PURE__ */ React.createElement(Checklist, { tasks, cats, checks, onToggle: toggle }), page === "manage" && /* @__PURE__ */ React.createElement(Manage, { tasks, setTasks, cats, setCats }), page === "stats" && /* @__PURE__ */ React.createElement(Stats, { tasks, cats, checks }), page === "backup" && /* @__PURE__ */ React.createElement(
       Backup,

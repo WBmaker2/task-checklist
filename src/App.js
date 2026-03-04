@@ -1,4 +1,5 @@
 (function () {
+  const APP_VERSION = "v1.0.0";
   const { SAMPLE_TASKS, DEFAULT_CATEGORIES } = window.AppConstants;
   const T = window.AppTheme;
   const { load, save } = window.AppUtils;
@@ -519,13 +520,65 @@
       refreshMeta: () => refreshServerMeta(syncUserRef.current),
     };
 
-    const reset = () => {
-      if (window.confirm("모든 데이터를 초기화하시겠습니까? 이 작업은 되돌릴 수 없습니다.")) {
-        setTasks(SAMPLE_TASKS);
-        setCats(DEFAULT_CATEGORIES);
-        setChecks({});
+    const syncIndicator = (() => {
+      if (!syncServiceState.ok) {
+        return {
+          label: "동기화 비활성",
+          bg: T.surfaceAlt,
+          border: T.border,
+          color: T.textMuted,
+          dot: T.textMuted,
+        };
       }
-    };
+
+      if (!syncUser) {
+        return {
+          label: "클라우드 미로그인",
+          bg: T.surfaceAlt,
+          border: T.border,
+          color: T.textMuted,
+          dot: T.textMuted,
+        };
+      }
+
+      if (syncStatus.busy) {
+        return {
+          label: "클라우드 동기화 중",
+          bg: "#eff6ff",
+          border: "#bfdbfe",
+          color: "#1d4ed8",
+          dot: "#2563eb",
+        };
+      }
+
+      if (serverAhead) {
+        return {
+          label: "서버 최신 감지",
+          bg: "#fff7ed",
+          border: "#fed7aa",
+          color: "#9a3412",
+          dot: "#c2410c",
+        };
+      }
+
+      if (syncMeta.dirty) {
+        return {
+          label: "동기화 대기중",
+          bg: "#eff6ff",
+          border: "#bfdbfe",
+          color: "#1d4ed8",
+          dot: "#2563eb",
+        };
+      }
+
+      return {
+        label: "동기화 완료",
+        bg: "#ecfdf3",
+        border: "#86efac",
+        color: "#166534",
+        dot: "#16a34a",
+      };
+    })();
 
     return (
       <div style={{ minHeight: "100vh", background: T.bg, fontFamily: "'Noto Sans KR',sans-serif", color: T.text }}>
@@ -545,25 +598,40 @@
         >
           <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
             <span style={{ fontSize: 24 }}>📋</span>
-            <span style={{ fontFamily: "Outfit", fontWeight: 800, fontSize: 16, color: T.text, letterSpacing: -0.5 }}>
-              학급 업무 체크리스트
-            </span>
+            <div style={{ display: "flex", alignItems: "baseline", gap: 6 }}>
+              <span style={{ fontFamily: "Outfit", fontWeight: 800, fontSize: 16, color: T.text, letterSpacing: -0.5 }}>
+                학급 업무 체크리스트
+              </span>
+              <span style={{ fontSize: 10, fontWeight: 700, color: T.textMuted, letterSpacing: 0.2 }}>{APP_VERSION}</span>
+            </div>
           </div>
-          <button
-            onClick={reset}
+          <div
             style={{
-              padding: "6px 12px",
-              borderRadius: 16,
-              border: `1px solid ${T.border}`,
-              background: T.surface,
+              padding: "6px 10px",
+              borderRadius: 999,
+              border: `1px solid ${syncIndicator.border}`,
+              background: syncIndicator.bg,
               fontSize: 11,
-              color: T.textMuted,
-              cursor: "pointer",
+              color: syncIndicator.color,
+              fontWeight: 700,
+              display: "inline-flex",
+              alignItems: "center",
+              gap: 6,
               fontFamily: "'Noto Sans KR'",
+              whiteSpace: "nowrap",
             }}
           >
-            🔄 초기화
-          </button>
+            <span
+              style={{
+                width: 6,
+                height: 6,
+                borderRadius: "50%",
+                background: syncIndicator.dot,
+                display: "inline-block",
+              }}
+            />
+            {syncIndicator.label}
+          </div>
         </div>
 
         <div style={{ maxWidth: 560, margin: "0 auto", padding: "20px 16px 100px" }}>
