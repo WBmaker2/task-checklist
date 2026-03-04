@@ -8,54 +8,70 @@
 - `styles/main.css`: 전역 스타일
 - `src/core/*`: 상수/테마/유틸/공통 컴포넌트/백업 서비스
 - `src/pages/*`: 화면 단위 컴포넌트
-- `src/config/firebase-config.js`: Firebase 설정
+- `src/config/supabase-config.js`: Supabase 연결 설정
 
-## 백업(신규)
+## 백업
 
-권장 백엔드 서비스는 **Firebase**입니다.
+백업 기능은 **Supabase + Google OAuth**로 동작합니다.
 
-이 앱은 다음 조합으로 백업을 지원합니다.
-- 인증: Google 로그인(Firebase Auth)
-- 저장: Firestore
+일반 사용자는 설정 입력 없이:
+- Google 로그인
+- `지금 백업`
+- `백업 복원`
+만 사용하면 됩니다.
 
-### 1) Firebase 프로젝트 준비
+## 관리자 1회 설정
 
-1. Firebase 콘솔에서 프로젝트 생성
-2. Authentication > Sign-in method에서 `Google` 활성화
-3. Firestore Database 생성
-4. 프로젝트 설정 > 웹 앱 추가 후 `firebaseConfig` 값 확보
+### 1) Supabase 프로젝트 준비
 
-### 2) 앱 연결
+1. Supabase 프로젝트 생성
+2. Auth > Providers > Google 활성화
+3. Auth > URL Configuration에서 사이트 URL/리다이렉트 URL 등록
 
-아래 둘 중 하나로 설정할 수 있습니다.
+### 2) 백업 테이블 생성
 
-- 앱 내 `백업` 탭에서 설정값 입력 후 `설정 저장`
-- 또는 `src/config/firebase-config.js`에 직접 값 입력
+SQL Editor에서 아래 실행:
 
-필수 값:
-- `apiKey`
-- `authDomain`
-- `projectId`
-- `appId`
+```sql
+create table if not exists public.user_backups (
+  user_id uuid primary key references auth.users(id) on delete cascade,
+  tasks jsonb not null default '[]'::jsonb,
+  cats jsonb not null default '[]'::jsonb,
+  checks jsonb not null default '{}'::jsonb,
+  updated_at_client timestamptz,
+  updated_at timestamptz not null default now(),
+  version int not null default 1
+);
 
-### 3) Firestore 보안 규칙 예시
+alter table public.user_backups enable row level security;
 
-아래 규칙은 사용자 본인 문서만 읽기/쓰기 허용합니다.
+create policy "Users can read own backup"
+on public.user_backups for select
+to authenticated
+using (auth.uid() = user_id);
 
-```txt
-rules_version = '2';
-service cloud.firestore {
-  match /databases/{database}/documents {
-    match /checklistBackups/{userId} {
-      allow read, write: if request.auth != null && request.auth.uid == userId;
-    }
-  }
-}
+create policy "Users can insert own backup"
+on public.user_backups for insert
+to authenticated
+with check (auth.uid() = user_id);
+
+create policy "Users can update own backup"
+on public.user_backups for update
+to authenticated
+using (auth.uid() = user_id)
+with check (auth.uid() = user_id);
 ```
 
-## 사용 방법
+### 3) 앱 연결값 입력 (코드 1회)
 
-- 하단 `백업` 메뉴로 이동
-- Google 로그인
-- `지금 백업` 클릭
-- 필요할 때 `백업 복원` 클릭
+`src/config/supabase-config.js`에 프로젝트 URL/anon key를 입력합니다.
+
+```js
+window.SUPABASE_CONFIG = {
+  url: "https://YOUR_PROJECT.supabase.co",
+  anonKey: "YOUR_SUPABASE_ANON_KEY",
+  redirectTo: window.location.origin + window.location.pathname,
+};
+```
+
+이 값은 사용자 입력 UI에 노출되지 않으며, 배포 후 일반 사용자는 Google 로그인만 하면 됩니다.

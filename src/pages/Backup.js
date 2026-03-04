@@ -1,25 +1,23 @@
 (function () {
   const T = window.AppTheme;
-  const { inputSt, labelSt } = window.AppComponents;
   const { prettyDateTime } = window.AppUtils;
 
   function Backup({ tasks, cats, checks, setTasks, setCats, setChecks }) {
-    const [configForm, setConfigForm] = React.useState(() => window.BackupService.getConfig());
     const [serviceState, setServiceState] = React.useState(() => window.BackupService.ensureInitialized());
-    const [user, setUser] = React.useState(() => window.BackupService.getCurrentUser());
+    const [user, setUser] = React.useState(null);
     const [meta, setMeta] = React.useState({ exists: false, updatedAtClient: null, updatedAt: null });
     const [busy, setBusy] = React.useState(false);
     const [msg, setMsg] = React.useState("");
 
-    const configured = window.BackupService.hasRequiredConfig(configForm);
-
-    const refreshMeta = React.useCallback(async () => {
-      if (!user) {
+    const refreshMeta = React.useCallback(async (targetUser) => {
+      const current = targetUser || user;
+      if (!current) {
         setMeta({ exists: false, updatedAtClient: null, updatedAt: null });
         return;
       }
+
       try {
-        const info = await window.BackupService.fetchBackupMeta(user.uid);
+        const info = await window.BackupService.fetchBackupMeta(current.id);
         setMeta(info);
       } catch (error) {
         setMsg(`백업 메타 조회 실패: ${error.message}`);
@@ -27,6 +25,7 @@
     }, [user]);
 
     React.useEffect(() => {
+      let mounted = true;
       const state = window.BackupService.ensureInitialized();
       setServiceState(state);
 
@@ -35,58 +34,41 @@
         return undefined;
       }
 
+      window.BackupService.getCurrentUser().then((nextUser) => {
+        if (mounted) {
+          setUser(nextUser || null);
+          if (nextUser) {
+            refreshMeta(nextUser);
+          }
+        }
+      });
+
       const unsubscribe = window.BackupService.onAuthStateChanged((nextUser) => {
-        setUser(nextUser);
+        if (!mounted) {
+          return;
+        }
+        setUser(nextUser || null);
+        if (nextUser) {
+          refreshMeta(nextUser);
+        } else {
+          setMeta({ exists: false, updatedAtClient: null, updatedAt: null });
+        }
       });
 
       return () => {
+        mounted = false;
         if (unsubscribe) {
           unsubscribe();
         }
       };
-    }, []);
-
-    React.useEffect(() => {
-      refreshMeta();
     }, [refreshMeta]);
-
-    const onChangeConfig = (key, value) => {
-      setConfigForm((prev) => ({ ...prev, [key]: value }));
-    };
-
-    const saveConfig = async () => {
-      setBusy(true);
-      setMsg("");
-      try {
-        if (!window.BackupService.hasRequiredConfig(configForm)) {
-          throw new Error("필수값(apiKey, authDomain, projectId, appId)을 입력해 주세요.");
-        }
-
-        const result = await window.BackupService.reinitialize(configForm);
-        setServiceState(result);
-        if (!result.ok) {
-          throw new Error(result.message || "Firebase 초기화 실패");
-        }
-        setUser(window.BackupService.getCurrentUser());
-        setMsg("Firebase 설정을 저장했습니다. 이제 Google 로그인을 진행할 수 있습니다.");
-      } catch (error) {
-        setMsg(`설정 저장 실패: ${error.message}`);
-      } finally {
-        setBusy(false);
-      }
-    };
 
     const login = async () => {
       setBusy(true);
       setMsg("");
       try {
-        const signedUser = await window.BackupService.signInWithGoogle();
-        setUser(signedUser || null);
-        if (signedUser) {
-          const info = await window.BackupService.fetchBackupMeta(signedUser.uid);
-          setMeta(info);
-        }
-        setMsg("Google 로그인 성공");
+        await window.BackupService.signInWithGoogle();
+        setMsg("Google 로그인 페이지로 이동합니다.");
       } catch (error) {
         setMsg(`로그인 실패: ${error.message}`);
       } finally {
@@ -111,15 +93,15 @@
 
     const backupNow = async () => {
       if (!user) {
-        setMsg("먼저 로그인해 주세요.");
+        setMsg("먼저 Google 로그인해 주세요.");
         return;
       }
 
       setBusy(true);
       setMsg("");
       try {
-        await window.BackupService.backupUserData(user.uid, { tasks, cats, checks });
-        await refreshMeta();
+        await window.BackupService.backupUserData(user.id, { tasks, cats, checks });
+        await refreshMeta(user);
         setMsg("클라우드 백업이 완료되었습니다.");
       } catch (error) {
         setMsg(`백업 실패: ${error.message}`);
@@ -130,7 +112,7 @@
 
     const restoreNow = async () => {
       if (!user) {
-        setMsg("먼저 로그인해 주세요.");
+        setMsg("먼저 Google 로그인해 주세요.");
         return;
       }
 
@@ -142,7 +124,7 @@
       setBusy(true);
       setMsg("");
       try {
-        const restored = await window.BackupService.restoreUserData(user.uid);
+        const restored = await window.BackupService.restoreUserData(user.id);
         if (!restored) {
           setMsg("복원할 백업 데이터가 없습니다.");
           return;
@@ -151,7 +133,7 @@
         setTasks(restored.tasks);
         setCats(restored.cats);
         setChecks(restored.checks);
-        await refreshMeta();
+        await refreshMeta(user);
         setMsg("복원이 완료되었습니다.");
       } catch (error) {
         setMsg(`복원 실패: ${error.message}`);
@@ -164,7 +146,7 @@
       <div>
         <h1 style={{ fontFamily: "Outfit", fontSize: 28, fontWeight: 800, margin: "0 0 8px", color: T.text }}>백업</h1>
         <p style={{ fontSize: 13, color: T.textMuted, marginBottom: 20 }}>
-          권장 백엔드: <strong>Firebase</strong> (Google 로그인 + Firestore)
+          Google 로그인만으로 클라우드 백업/복원을 제공합니다.
         </p>
 
         <div
@@ -198,89 +180,46 @@
             border: `1px solid ${T.border}`,
             boxShadow: T.shadow,
             padding: 20,
-            marginBottom: 18,
           }}
         >
-          <h3 style={{ fontSize: 15, fontWeight: 700, color: T.text, margin: "0 0 12px" }}>Firebase 연결 설정</h3>
-          <p style={{ fontSize: 12, color: T.textMuted, margin: "0 0 14px" }}>
-            Firebase Web App 설정을 한 번만 입력하면 Google 로그인으로 백업/복원이 가능합니다.
-          </p>
-
-          <label style={labelSt}>apiKey *</label>
-          <input value={configForm.apiKey} onChange={(e) => onChangeConfig("apiKey", e.target.value)} style={inputSt} placeholder="AIza..." />
-
-          <label style={labelSt}>authDomain *</label>
-          <input value={configForm.authDomain} onChange={(e) => onChangeConfig("authDomain", e.target.value)} style={inputSt} placeholder="your-project.firebaseapp.com" />
-
-          <label style={labelSt}>projectId *</label>
-          <input value={configForm.projectId} onChange={(e) => onChangeConfig("projectId", e.target.value)} style={inputSt} placeholder="your-project-id" />
-
-          <label style={labelSt}>appId *</label>
-          <input value={configForm.appId} onChange={(e) => onChangeConfig("appId", e.target.value)} style={inputSt} placeholder="1:123456789:web:abcdef" />
-
-          <label style={labelSt}>messagingSenderId</label>
-          <input value={configForm.messagingSenderId} onChange={(e) => onChangeConfig("messagingSenderId", e.target.value)} style={inputSt} placeholder="123456789" />
-
-          <label style={labelSt}>storageBucket</label>
-          <input value={configForm.storageBucket} onChange={(e) => onChangeConfig("storageBucket", e.target.value)} style={{ ...inputSt, marginBottom: 6 }} placeholder="your-project.appspot.com" />
-
-          <button
-            onClick={saveConfig}
-            disabled={busy}
-            style={{
-              marginTop: 8,
-              padding: "10px 16px",
-              borderRadius: 10,
-              border: "none",
-              background: configured ? T.accent : T.textMuted,
-              color: "#fff",
-              fontWeight: 600,
-              fontSize: 13,
-              cursor: busy ? "not-allowed" : "pointer",
-              opacity: busy ? 0.7 : 1,
-            }}
-          >
-            설정 저장
-          </button>
-
-          {!serviceState.ok && (
-            <div style={{ marginTop: 10, fontSize: 12, color: T.danger }}>
-              현재 상태: {serviceState.message}
-            </div>
-          )}
-        </div>
-
-        <div
-          style={{
-            background: T.surface,
-            borderRadius: 16,
-            border: `1px solid ${T.border}`,
-            boxShadow: T.shadow,
-            padding: 20,
-          }}
-        >
-          <h3 style={{ fontSize: 15, fontWeight: 700, color: T.text, margin: "0 0 12px" }}>Google 백업 실행</h3>
+          <h3 style={{ fontSize: 15, fontWeight: 700, color: T.text, margin: "0 0 12px" }}>Google 백업</h3>
 
           <div style={{ fontSize: 13, color: T.text, marginBottom: 8 }}>
-            로그인 상태: {user ? `${user.displayName || "사용자"} (${user.email || "이메일 없음"})` : "미로그인"}
+            로그인 상태: {user ? `${user.user_metadata?.full_name || "사용자"} (${user.email || "이메일 없음"})` : "미로그인"}
           </div>
           <div style={{ fontSize: 12, color: T.textMuted, marginBottom: 14 }}>
             마지막 백업: {meta.exists ? prettyDateTime(meta.updatedAtClient || meta.updatedAt) : "없음"}
           </div>
 
+          {!serviceState.ok && (
+            <div
+              style={{
+                marginBottom: 12,
+                padding: "10px 12px",
+                borderRadius: 10,
+                background: "#fef2f2",
+                border: `1px solid #fecaca`,
+                color: T.danger,
+                fontSize: 12,
+              }}
+            >
+              {serviceState.message}
+            </div>
+          )}
+
           <div style={{ display: "flex", gap: 8, flexWrap: "wrap" }}>
             <button
               onClick={login}
-              disabled={!configured || busy || !!user}
+              disabled={!serviceState.ok || busy || !!user}
               style={{
                 padding: "10px 14px",
                 borderRadius: 10,
                 border: `1px solid ${T.border}`,
-                background: !configured || user ? T.surfaceAlt : T.surface,
+                background: !serviceState.ok || user ? T.surfaceAlt : T.surface,
                 color: T.text,
                 fontWeight: 600,
                 fontSize: 13,
-                cursor: !configured || busy || user ? "not-allowed" : "pointer",
+                cursor: !serviceState.ok || busy || user ? "not-allowed" : "pointer",
               }}
             >
               Google 로그인

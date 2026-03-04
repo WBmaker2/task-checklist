@@ -1,89 +1,49 @@
 (function () {
-  const CONFIG_KEY = "cc_firebase_config_v1";
-  const COLLECTION = "checklistBackups";
+  const BACKUP_TABLE = "user_backups";
 
   let initialized = false;
-  let auth = null;
-  let db = null;
-  let provider = null;
+  let client = null;
 
   function sanitizeConfig(config) {
     const c = config || {};
     return {
-      apiKey: (c.apiKey || "").trim(),
-      authDomain: (c.authDomain || "").trim(),
-      projectId: (c.projectId || "").trim(),
-      storageBucket: (c.storageBucket || "").trim(),
-      messagingSenderId: (c.messagingSenderId || "").trim(),
-      appId: (c.appId || "").trim(),
+      url: (c.url || "").trim(),
+      anonKey: (c.anonKey || "").trim(),
+      redirectTo: (c.redirectTo || `${window.location.origin}${window.location.pathname}`).trim(),
     };
   }
 
   function getConfig() {
-    const saved = window.AppUtils.load(CONFIG_KEY, null);
-    if (saved && typeof saved === "object") {
-      return sanitizeConfig(saved);
-    }
-    return sanitizeConfig(window.FIREBASE_CONFIG);
-  }
-
-  function setConfig(nextConfig) {
-    const config = sanitizeConfig(nextConfig);
-    window.AppUtils.save(CONFIG_KEY, config);
-    return config;
-  }
-
-  async function reinitialize(nextConfig) {
-    const firebaseObj = window.firebase;
-    setConfig(nextConfig);
-
-    if (firebaseObj && firebaseObj.apps && firebaseObj.apps.length) {
-      await Promise.all(
-        firebaseObj.apps.map((app) =>
-          app.delete().catch(() => {
-            // ignore app deletion failures
-          })
-        )
-      );
-    }
-
-    initialized = false;
-    auth = null;
-    db = null;
-    provider = null;
-
-    return ensureInitialized();
+    return sanitizeConfig(window.SUPABASE_CONFIG || {});
   }
 
   function hasRequiredConfig(config) {
-    return Boolean(config.apiKey && config.authDomain && config.projectId && config.appId);
+    return Boolean(config.url && config.anonKey);
   }
 
   function ensureInitialized() {
-    const firebaseObj = window.firebase;
-    if (!firebaseObj) {
-      return { ok: false, code: "firebase-sdk-missing", message: "Firebase SDK를 불러오지 못했습니다." };
+    const sdk = window.supabase;
+    if (!sdk || typeof sdk.createClient !== "function") {
+      return { ok: false, code: "supabase-sdk-missing", message: "Supabase SDK를 불러오지 못했습니다." };
     }
 
     const config = getConfig();
     if (!hasRequiredConfig(config)) {
-      return { ok: false, code: "missing-config", message: "Firebase 설정값이 필요합니다." };
+      return {
+        ok: false,
+        code: "missing-config",
+        message: "백업 기능이 아직 활성화되지 않았습니다. 관리자에게 Supabase 설정을 요청해 주세요.",
+      };
     }
 
-    if (initialized) {
-      return { ok: true, auth, db, provider, config };
+    if (initialized && client) {
+      return { ok: true, client, config };
     }
 
     try {
-      if (!firebaseObj.apps.length) {
-        firebaseObj.initializeApp(config);
-      }
-      auth = firebaseObj.auth();
-      db = firebaseObj.firestore();
-      provider = new firebaseObj.auth.GoogleAuthProvider();
-      provider.setCustomParameters({ prompt: "select_account" });
+      client = sdk.createClient(config.url, config.anonKey);
       initialized = true;
-      return { ok: true, auth, db, provider, config };
+      return { ok: true, client, config };
     } catch (error) {
       return { ok: false, code: "init-failed", message: error?.message || "초기화 실패" };
     }
@@ -97,12 +57,17 @@
     return state;
   }
 
-  function getCurrentUser() {
+  async function getCurrentUser() {
     const state = ensureInitialized();
     if (!state.ok) {
       return null;
     }
-    return state.auth.currentUser;
+
+    const { data, error } = await state.client.auth.getUser();
+    if (error) {
+      return null;
+    }
+    return data.user || null;
   }
 
   function onAuthStateChanged(callback) {
@@ -111,75 +76,121 @@
       callback(null);
       return () => {};
     }
-    return state.auth.onAuthStateChanged(callback);
+
+    const { data } = state.client.auth.onAuthStateChange((_event, session) => {
+      callback(session?.user || null);
+    });
+
+    return () => {
+      data?.subscription?.unsubscribe?.();
+    };
   }
 
   async function signInWithGoogle() {
     const state = assertReady();
-    const result = await state.auth.signInWithPopup(state.provider);
-    return result.user;
+    const config = getConfig();
+
+    const { error } = await state.client.auth.signInWithOAuth({
+      provider: "google",
+      options: {
+        redirectTo: config.redirectTo,
+        queryParams: {
+          access_type: "offline",
+          prompt: "consent",
+        },
+      },
+    });
+
+    if (error) {
+      throw error;
+    }
+
+    return { redirecting: true };
   }
 
   async function signOut() {
     const state = assertReady();
-    await state.auth.signOut();
-  }
-
-  function userDoc(userId) {
-    return db.collection(COLLECTION).doc(userId);
+    const { error } = await state.client.auth.signOut();
+    if (error) {
+      throw error;
+    }
   }
 
   async function backupUserData(userId, payload) {
     const state = assertReady();
     const safePayload = {
+      user_id: userId,
       tasks: Array.isArray(payload.tasks) ? payload.tasks : [],
       cats: Array.isArray(payload.cats) ? payload.cats : [],
       checks: payload.checks && typeof payload.checks === "object" ? payload.checks : {},
-      updatedAtClient: new Date().toISOString(),
-      updatedAt: window.firebase.firestore.FieldValue.serverTimestamp(),
-      version: 2,
+      updated_at_client: new Date().toISOString(),
+      version: 3,
     };
 
-    await userDoc(userId).set(safePayload, { merge: true });
+    const { error } = await state.client
+      .from(BACKUP_TABLE)
+      .upsert(safePayload, { onConflict: "user_id" });
+
+    if (error) {
+      throw error;
+    }
+
     return safePayload;
   }
 
   async function restoreUserData(userId) {
-    assertReady();
-    const snap = await userDoc(userId).get();
-    if (!snap.exists) {
+    const state = assertReady();
+
+    const { data, error } = await state.client
+      .from(BACKUP_TABLE)
+      .select("tasks,cats,checks,updated_at,updated_at_client,version")
+      .eq("user_id", userId)
+      .maybeSingle();
+
+    if (error) {
+      throw error;
+    }
+
+    if (!data) {
       return null;
     }
 
-    const raw = snap.data() || {};
     return {
-      tasks: Array.isArray(raw.tasks) ? raw.tasks : [],
-      cats: Array.isArray(raw.cats) ? raw.cats : [],
-      checks: raw.checks && typeof raw.checks === "object" ? raw.checks : {},
-      updatedAtClient: raw.updatedAtClient || null,
-      updatedAt: raw.updatedAt && raw.updatedAt.toDate ? raw.updatedAt.toDate().toISOString() : null,
-      version: raw.version || 1,
+      tasks: Array.isArray(data.tasks) ? data.tasks : [],
+      cats: Array.isArray(data.cats) ? data.cats : [],
+      checks: data.checks && typeof data.checks === "object" ? data.checks : {},
+      updatedAtClient: data.updated_at_client || null,
+      updatedAt: data.updated_at || null,
+      version: data.version || 1,
     };
   }
 
   async function fetchBackupMeta(userId) {
-    assertReady();
-    const snap = await userDoc(userId).get();
-    if (!snap.exists) {
+    const state = assertReady();
+
+    const { data, error } = await state.client
+      .from(BACKUP_TABLE)
+      .select("updated_at,updated_at_client")
+      .eq("user_id", userId)
+      .maybeSingle();
+
+    if (error) {
+      throw error;
+    }
+
+    if (!data) {
       return { exists: false, updatedAtClient: null, updatedAt: null };
     }
-    const raw = snap.data() || {};
+
     return {
       exists: true,
-      updatedAtClient: raw.updatedAtClient || null,
-      updatedAt: raw.updatedAt && raw.updatedAt.toDate ? raw.updatedAt.toDate().toISOString() : null,
+      updatedAtClient: data.updated_at_client || null,
+      updatedAt: data.updated_at || null,
     };
   }
 
   window.BackupService = {
     getConfig,
-    setConfig,
-    reinitialize,
     hasRequiredConfig,
     ensureInitialized,
     getCurrentUser,
