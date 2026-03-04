@@ -1,0 +1,630 @@
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>📋 학급 업무 체크리스트</title>
+<link href="https://fonts.googleapis.com/css2?family=Noto+Sans+KR:wght@300;400;500;600;700;900&family=Outfit:wght@300;400;500;600;700;800&display=swap" rel="stylesheet">
+<script src="https://cdnjs.cloudflare.com/ajax/libs/react/18.2.0/umd/react.production.min.js"></script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/react-dom/18.2.0/umd/react-dom.production.min.js"></script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/babel-standalone/7.23.9/babel.min.js"></script>
+<style>
+  * { box-sizing: border-box; margin: 0; padding: 0; }
+  body { margin: 0; background: #f0ebe3; font-family: 'Noto Sans KR', sans-serif; }
+  ::-webkit-scrollbar { width: 6px; }
+  ::-webkit-scrollbar-track { background: transparent; }
+  ::-webkit-scrollbar-thumb { background: #ddd5c8; border-radius: 3px; }
+  select { appearance: auto; }
+  input:focus, select:focus, textarea:focus { border-color: #d4763c !important; outline: none; }
+  @keyframes slideUp {
+    from { opacity: 0; transform: translateY(12px); }
+    to { opacity: 1; transform: translateY(0); }
+  }
+</style>
+</head>
+<body>
+<div id="root"></div>
+<script type="text/babel">
+const { useState, useEffect, useMemo, useCallback } = React;
+
+// ─── Constants ───
+const DAYS = ["월", "화", "수", "목", "금"];
+const PRIORITIES = { high: "상", medium: "중", low: "하" };
+const PRIORITY_ORDER = { high: 0, medium: 1, low: 2 };
+const REPEAT_TYPES = { daily: "매일", weekly: "매주", monthly: "매월" };
+
+const DEFAULT_CATEGORIES = [
+  { id: "env", name: "환경정화", color: "#4ade80", icon: "🌿" },
+  { id: "safety", name: "안전점검", color: "#f87171", icon: "🛡️" },
+  { id: "docs", name: "서류/공문", color: "#60a5fa", icon: "📄" },
+  { id: "counsel", name: "학생상담", color: "#c084fc", icon: "💬" },
+  { id: "event", name: "학교행사", color: "#fb923c", icon: "🎪" },
+  { id: "parent", name: "학부모소통", color: "#f472b6", icon: "📞" },
+  { id: "class", name: "교실관리", color: "#facc15", icon: "🏫" },
+  { id: "etc", name: "기타", color: "#94a3b8", icon: "📌" },
+];
+
+const SAMPLE_TASKS = [
+  { id: "t1", name: "교실 환기 및 환경정리", categoryId: "env", repeatType: "daily", repeatDay: null, repeatWeek: null, priority: "medium", memo: "창문 열어 환기 후 정리" },
+  { id: "t2", name: "화재 대피로 점검", categoryId: "safety", repeatType: "monthly", repeatDay: null, repeatWeek: 1, priority: "high", memo: "비상구 표시등 확인" },
+  { id: "t3", name: "출결 현황 보고", categoryId: "docs", repeatType: "weekly", repeatDay: 4, repeatWeek: null, priority: "high", memo: "금요일 마감" },
+  { id: "t4", name: "학급 게시판 업데이트", categoryId: "class", repeatType: "monthly", repeatDay: null, repeatWeek: 2, priority: "low", memo: "" },
+  { id: "t5", name: "학부모 알림장 발송", categoryId: "parent", repeatType: "weekly", repeatDay: 0, repeatWeek: null, priority: "medium", memo: "월요일 발송" },
+  { id: "t6", name: "안전사고 예방 교육", categoryId: "safety", repeatType: "monthly", repeatDay: null, repeatWeek: 3, priority: "high", memo: "" },
+  { id: "t7", name: "독서 기록 점검", categoryId: "counsel", repeatType: "weekly", repeatDay: 2, repeatWeek: null, priority: "low", memo: "수요일 점검" },
+];
+
+// ─── Theme ───
+const T = {
+  bg: "#f0ebe3", surface: "#faf8f5", surfaceAlt: "#e8e2d9",
+  text: "#2c2418", textMuted: "#8a7e6e",
+  accent: "#d4763c", accentLight: "#f0c8a8", accentDark: "#b05e2a",
+  border: "#ddd5c8", success: "#4ade80", danger: "#f87171",
+  shadow: "0 2px 16px rgba(44,36,24,0.08)", shadowLg: "0 8px 32px rgba(44,36,24,0.12)",
+};
+
+// ─── Utilities ───
+function getToday() { return new Date(); }
+function getWeekNumber(date) { return Math.ceil(new Date(date).getDate() / 7); }
+function getWeekDates(date) {
+  const d = new Date(date); const day = d.getDay();
+  const mon = new Date(d); mon.setDate(d.getDate() - (day === 0 ? 6 : day - 1));
+  const dates = [];
+  for (let i = 0; i < 5; i++) { const dd = new Date(mon); dd.setDate(mon.getDate() + i); dates.push(dd); }
+  return dates;
+}
+function fmtDate(d) { return `${d.getFullYear()}-${String(d.getMonth()+1).padStart(2,"0")}-${String(d.getDate()).padStart(2,"0")}`; }
+function fmtDateKr(d) { return `${d.getMonth()+1}월 ${d.getDate()}일`; }
+function getMonthWeeks(year, month) {
+  const weeks = []; const last = new Date(year, month+1, 0).getDate();
+  for (let w = 1; w <= 5; w++) { const s = (w-1)*7+1, e = Math.min(w*7, last); if (s <= last) weeks.push({week:w, start:s, end:e}); }
+  return weeks;
+}
+function shouldShow(task, date) {
+  const dow = date.getDay(); if (dow === 0 || dow === 6) return false;
+  const mapped = dow === 0 ? 6 : dow - 1; const wn = getWeekNumber(date);
+  if (task.repeatType === "daily") return true;
+  if (task.repeatType === "weekly" && task.repeatDay === mapped) return true;
+  if (task.repeatType === "monthly" && task.repeatWeek === wn) return true;
+  return false;
+}
+function uid() { return "id_" + Math.random().toString(36).substring(2,10) + Date.now().toString(36); }
+function load(key, fb) { try { const r = localStorage.getItem(key); return r ? JSON.parse(r) : fb; } catch { return fb; } }
+function save(key, data) { try { localStorage.setItem(key, JSON.stringify(data)); } catch {} }
+
+// ─── Shared Styles ───
+const inputSt = { width:"100%", padding:"10px 14px", borderRadius:10, border:`1px solid ${T.border}`, background:T.bg, fontSize:14, fontFamily:"'Noto Sans KR',sans-serif", color:T.text, outline:"none", marginBottom:14, boxSizing:"border-box" };
+const labelSt = { display:"block", fontSize:12, fontWeight:600, color:T.textMuted, marginBottom:5 };
+const iconBtn = { width:34, height:34, borderRadius:10, border:`1px solid ${T.border}`, background:T.bg, cursor:"pointer", fontSize:14, display:"flex", alignItems:"center", justifyContent:"center" };
+
+// ─── Components ───
+function ProgressRing({ percent, size=120, stroke=10 }) {
+  const r = (size-stroke)/2, circ = 2*Math.PI*r, offset = circ - (percent/100)*circ;
+  return (
+    <svg width={size} height={size} style={{transform:"rotate(-90deg)"}}>
+      <circle cx={size/2} cy={size/2} r={r} fill="none" stroke={T.surfaceAlt} strokeWidth={stroke}/>
+      <circle cx={size/2} cy={size/2} r={r} fill="none" stroke={T.accent} strokeWidth={stroke}
+        strokeDasharray={circ} strokeDashoffset={offset} strokeLinecap="round"
+        style={{transition:"stroke-dashoffset 0.8s cubic-bezier(0.4,0,0.2,1)"}}/>
+      <text x={size/2} y={size/2} textAnchor="middle" dominantBaseline="central"
+        style={{transform:"rotate(90deg)",transformOrigin:"center",fontSize:size*0.26,fontWeight:700,fill:T.text,fontFamily:"Outfit"}}>
+        {Math.round(percent)}%
+      </text>
+    </svg>
+  );
+}
+
+function CatBadge({ cat }) {
+  return <span style={{display:"inline-flex",alignItems:"center",gap:4,padding:"3px 10px",borderRadius:20,fontSize:12,fontWeight:500,background:cat.color+"22",color:cat.color,border:`1px solid ${cat.color}44`}}>{cat.icon} {cat.name}</span>;
+}
+
+function PriBadge({ p }) {
+  const c = {high:"#ef4444",medium:"#f59e0b",low:"#6b7280"};
+  return <span style={{fontSize:11,fontWeight:600,padding:"2px 8px",borderRadius:10,background:c[p]+"18",color:c[p],border:`1px solid ${c[p]}33`}}>{PRIORITIES[p]}</span>;
+}
+
+function CheckItem({ task, cat, checked, onToggle, showDate, delay=0 }) {
+  return (
+    <div onClick={onToggle} style={{display:"flex",alignItems:"center",gap:12,padding:"12px 16px",background:checked?T.surfaceAlt+"88":T.surface,borderRadius:12,cursor:"pointer",border:`1px solid ${T.border}`,transition:"all 0.25s",opacity:checked?0.65:1,animation:`slideUp 0.4s ease ${delay}s both`}}>
+      <div style={{width:24,height:24,borderRadius:8,flexShrink:0,border:checked?"none":`2px solid ${T.border}`,background:checked?T.accent:"transparent",display:"flex",alignItems:"center",justifyContent:"center",transition:"all 0.2s"}}>
+        {checked && <span style={{color:"#fff",fontSize:14,fontWeight:700}}>✓</span>}
+      </div>
+      <div style={{flex:1,minWidth:0}}>
+        <div style={{fontSize:14,fontWeight:500,color:T.text,textDecoration:checked?"line-through":"none",opacity:checked?0.6:1}}>{task.name}</div>
+        <div style={{display:"flex",gap:6,marginTop:4,flexWrap:"wrap",alignItems:"center"}}>
+          {cat && <CatBadge cat={cat}/>}
+          <PriBadge p={task.priority}/>
+          {showDate && <span style={{fontSize:11,color:T.textMuted}}>{showDate}</span>}
+          {task.memo && <span style={{fontSize:11,color:T.textMuted}}>💡 {task.memo}</span>}
+        </div>
+      </div>
+    </div>
+  );
+}
+
+function TabBtn({ active, onClick, children }) {
+  return <button onClick={onClick} style={{padding:"8px 20px",borderRadius:25,border:"none",background:active?T.accent:"transparent",color:active?"#fff":T.textMuted,fontWeight:active?600:400,fontSize:14,cursor:"pointer",fontFamily:"'Noto Sans KR',sans-serif",transition:"all 0.25s"}}>{children}</button>;
+}
+
+function NavBtn({ active, icon, label, onClick }) {
+  return (
+    <button onClick={onClick} style={{display:"flex",flexDirection:"column",alignItems:"center",gap:2,padding:"8px 16px",border:"none",background:"transparent",cursor:"pointer",color:active?T.accent:T.textMuted,fontFamily:"'Noto Sans KR',sans-serif",fontSize:11,fontWeight:active?600:400,transition:"color 0.2s",position:"relative"}}>
+      <span style={{fontSize:22}}>{icon}</span>{label}
+      {active && <div style={{position:"absolute",top:0,left:"50%",transform:"translateX(-50%)",width:20,height:3,background:T.accent,borderRadius:2}}/>}
+    </button>
+  );
+}
+
+// ─── Dashboard ───
+function Dashboard({ tasks, cats, checks, onToggle }) {
+  const [selDate, setSelDate] = useState(getToday());
+  const realToday = getToday();
+  const weekDates = getWeekDates(selDate);
+  const selStr = fmtDate(selDate);
+  const isToday = fmtDate(selDate) === fmtDate(realToday);
+
+  const dayTasks = tasks.filter(t => shouldShow(t, selDate)).sort((a,b) => PRIORITY_ORDER[a.priority]-PRIORITY_ORDER[b.priority]);
+  const weekTasks = weekDates.flatMap(d => tasks.filter(t => shouldShow(t,d)).map(t => ({task:t,date:fmtDate(d)})));
+  const wTotal = weekTasks.length, wDone = weekTasks.filter(wt => checks[`${wt.task.id}_${wt.date}`]).length;
+  const wPct = wTotal > 0 ? (wDone/wTotal)*100 : 0;
+  const tTotal = dayTasks.length, tDone = dayTasks.filter(t => checks[`${t.id}_${selStr}`]).length;
+  const pending = dayTasks.filter(t => !checks[`${t.id}_${selStr}`]);
+
+  const navDay = (dir) => { const d = new Date(selDate); d.setDate(d.getDate()+dir); setSelDate(d); };
+  const goToday = () => setSelDate(getToday());
+
+  return (
+    <div>
+      <div style={{textAlign:"center",marginBottom:28}}>
+        <div style={{display:"flex",alignItems:"center",justifyContent:"center",gap:12,marginBottom:6}}>
+          <button onClick={()=>navDay(-1)} style={{width:32,height:32,borderRadius:"50%",border:`1px solid ${T.border}`,background:T.surface,cursor:"pointer",fontSize:14,display:"flex",alignItems:"center",justifyContent:"center"}}>←</button>
+          <div>
+            <div style={{fontSize:15,color:T.text,fontWeight:600,letterSpacing:0.5}}>
+              {selDate.getFullYear()}년 {selDate.getMonth()+1}월 {selDate.getDate()}일 {["일","월","화","수","목","금","토"][selDate.getDay()]}요일
+            </div>
+            {!isToday && (
+              <button onClick={goToday} style={{marginTop:4,padding:"3px 12px",borderRadius:12,border:`1px solid ${T.accent}`,background:T.accent+"12",color:T.accent,fontSize:11,fontWeight:600,cursor:"pointer",fontFamily:"'Noto Sans KR'"}}>
+                오늘로 돌아가기
+              </button>
+            )}
+          </div>
+          <button onClick={()=>navDay(1)} style={{width:32,height:32,borderRadius:"50%",border:`1px solid ${T.border}`,background:T.surface,cursor:"pointer",fontSize:14,display:"flex",alignItems:"center",justifyContent:"center"}}>→</button>
+        </div>
+        <h1 style={{fontFamily:"Outfit,sans-serif",fontSize:28,fontWeight:800,color:T.text,margin:"4px 0 0"}}>
+          {isToday ? "오늘의 업무" : `${selDate.getMonth()+1}/${selDate.getDate()} 업무`}
+        </h1>
+      </div>
+
+      <div style={{display:"flex",gap:20,marginBottom:28,flexWrap:"wrap",justifyContent:"center"}}>
+        <div style={{flex:"1 1 160px",maxWidth:220,background:T.surface,borderRadius:20,padding:24,textAlign:"center",boxShadow:T.shadow,border:`1px solid ${T.border}`}}>
+          <ProgressRing percent={wPct} size={110}/>
+          <div style={{marginTop:10,fontSize:13,fontWeight:600,color:T.text}}>이번 주 진행률</div>
+          <div style={{fontSize:12,color:T.textMuted}}>{wDone} / {wTotal} 완료</div>
+        </div>
+        <div style={{flex:"1 1 160px",maxWidth:220,display:"flex",flexDirection:"column",gap:12}}>
+          <div style={{background:T.surface,borderRadius:16,padding:"18px 20px",boxShadow:T.shadow,border:`1px solid ${T.border}`}}>
+            <div style={{fontSize:32,fontWeight:800,fontFamily:"Outfit",color:T.accent}}>{tDone}<span style={{fontSize:16,color:T.textMuted}}>/{tTotal}</span></div>
+            <div style={{fontSize:12,color:T.textMuted,fontWeight:500}}>완료</div>
+          </div>
+          <div style={{background:T.surface,borderRadius:16,padding:"18px 20px",boxShadow:T.shadow,border:`1px solid ${T.border}`}}>
+            <div style={{fontSize:32,fontWeight:800,fontFamily:"Outfit",color:pending.length>0?T.danger:T.success}}>{pending.length}</div>
+            <div style={{fontSize:12,color:T.textMuted,fontWeight:500}}>미완료 업무</div>
+          </div>
+        </div>
+      </div>
+
+      <div style={{background:T.surface,borderRadius:16,padding:20,marginBottom:24,boxShadow:T.shadow,border:`1px solid ${T.border}`}}>
+        <h3 style={{fontSize:15,fontWeight:700,margin:"0 0 14px",color:T.text}}>📅 이번 주 요약 <span style={{fontSize:11,fontWeight:400,color:T.textMuted}}>· 날짜를 눌러 이동</span></h3>
+        <div style={{display:"flex",gap:8}}>
+          {weekDates.map((d,i) => {
+            const dt = tasks.filter(t=>shouldShow(t,d)), dd = dt.filter(t=>checks[`${t.id}_${fmtDate(d)}`]).length, dtl = dt.length;
+            const isSel = fmtDate(d)===selStr, pct = dtl>0?dd/dtl:0;
+            const isRT = fmtDate(d)===fmtDate(realToday);
+            return (
+              <div key={i} onClick={()=>setSelDate(new Date(d))} style={{flex:1,textAlign:"center",padding:"10px 4px",borderRadius:12,cursor:"pointer",background:isSel?T.accent+"15":"transparent",border:isSel?`2px solid ${T.accent}`:"2px solid transparent",transition:"all 0.2s"}}>
+                <div style={{fontSize:12,fontWeight:600,color:isSel?T.accent:T.textMuted}}>{DAYS[i]}</div>
+                <div style={{fontSize:11,color:isRT&&!isSel?T.accent:T.textMuted,marginTop:2,fontWeight:isRT?700:400}}>{d.getDate()}일{isRT&&!isSel?" ·오늘":""}</div>
+                <div style={{width:28,height:28,borderRadius:"50%",margin:"8px auto 0",background:dtl===0?T.surfaceAlt:pct===1?T.success:pct>0?T.accentLight:T.surfaceAlt,display:"flex",alignItems:"center",justifyContent:"center",fontSize:11,fontWeight:700,color:pct===1?"#fff":T.text}}>
+                  {dtl>0?`${dd}`:"-"}
+                </div>
+              </div>
+            );
+          })}
+        </div>
+      </div>
+
+      <h3 style={{fontSize:15,fontWeight:700,margin:"0 0 12px",color:T.text}}>
+        {pending.length > 0 ? "⚡ 남은 업무" : "✨ 업무를 모두 완료했어요!"}
+      </h3>
+      <div style={{display:"flex",flexDirection:"column",gap:8}}>
+        {dayTasks.map((t,i) => <CheckItem key={t.id} task={t} cat={cats.find(c=>c.id===t.categoryId)} checked={!!checks[`${t.id}_${selStr}`]} onToggle={()=>onToggle(t.id,selStr)} delay={i*0.05}/>)}
+        {dayTasks.length===0 && <div style={{textAlign:"center",padding:40,color:T.textMuted,fontSize:14}}>등록된 업무가 없습니다 🎉</div>}
+      </div>
+    </div>
+  );
+}
+
+// ─── Checklist ───
+function Checklist({ tasks, cats, checks, onToggle }) {
+  const [vm, setVm] = useState("week");
+  const [cd, setCd] = useState(getToday());
+  const [fc, setFc] = useState("all");
+  const [fs, setFs] = useState("all");
+  const wd = getWeekDates(cd), yr = cd.getFullYear(), mo = cd.getMonth(), mw = getMonthWeeks(yr,mo);
+  const cf = t => fc==="all"||t.categoryId===fc;
+  const sf = (t,ds) => { if(fs==="all") return true; const d=!!checks[`${t.id}_${ds}`]; return fs==="done"?d:!d; };
+  const navW = dir => { const d=new Date(cd); d.setDate(d.getDate()+dir*7); setCd(d); };
+  const navM = dir => { const d=new Date(cd); d.setMonth(d.getMonth()+dir); setCd(d); };
+
+  return (
+    <div>
+      <h1 style={{fontFamily:"Outfit",fontSize:28,fontWeight:800,margin:"0 0 20px",color:T.text}}>체크리스트</h1>
+      <div style={{display:"flex",flexWrap:"wrap",gap:8,marginBottom:16,alignItems:"center"}}>
+        <div style={{background:T.surfaceAlt,borderRadius:25,padding:3,display:"inline-flex"}}>
+          <TabBtn active={vm==="week"} onClick={()=>setVm("week")}>주별</TabBtn>
+          <TabBtn active={vm==="month"} onClick={()=>setVm("month")}>월별</TabBtn>
+        </div>
+        <select value={fc} onChange={e=>setFc(e.target.value)} style={{padding:"8px 12px",borderRadius:20,border:`1px solid ${T.border}`,background:T.surface,fontSize:13,fontFamily:"'Noto Sans KR'",color:T.text,outline:"none"}}>
+          <option value="all">전체 카테고리</option>
+          {cats.map(c => <option key={c.id} value={c.id}>{c.icon} {c.name}</option>)}
+        </select>
+        <select value={fs} onChange={e=>setFs(e.target.value)} style={{padding:"8px 12px",borderRadius:20,border:`1px solid ${T.border}`,background:T.surface,fontSize:13,fontFamily:"'Noto Sans KR'",color:T.text,outline:"none"}}>
+          <option value="all">전체</option><option value="done">완료</option><option value="pending">미완료</option>
+        </select>
+      </div>
+
+      <div style={{display:"flex",alignItems:"center",justifyContent:"space-between",marginBottom:16}}>
+        <button onClick={()=>vm==="week"?navW(-1):navM(-1)} style={{width:36,height:36,borderRadius:"50%",border:`1px solid ${T.border}`,background:T.surface,cursor:"pointer",fontSize:16,display:"flex",alignItems:"center",justifyContent:"center"}}>←</button>
+        <span style={{fontSize:15,fontWeight:600,color:T.text}}>{vm==="week"?`${fmtDateKr(wd[0])} ~ ${fmtDateKr(wd[4])}`:`${yr}년 ${mo+1}월`}</span>
+        <button onClick={()=>vm==="week"?navW(1):navM(1)} style={{width:36,height:36,borderRadius:"50%",border:`1px solid ${T.border}`,background:T.surface,cursor:"pointer",fontSize:16,display:"flex",alignItems:"center",justifyContent:"center"}}>→</button>
+      </div>
+
+      {vm==="week" && wd.map((d,di) => {
+        const ds = fmtDate(d), isT = ds===fmtDate(getToday());
+        const dt = tasks.filter(t=>shouldShow(t,d)&&cf(t)&&sf(t,ds)).sort((a,b)=>PRIORITY_ORDER[a.priority]-PRIORITY_ORDER[b.priority]);
+        return (
+          <div key={di} style={{marginBottom:16}}>
+            <div style={{display:"flex",alignItems:"center",gap:8,marginBottom:8,padding:"6px 12px",borderRadius:10,background:isT?T.accent+"12":"transparent"}}>
+              <span style={{width:32,height:32,borderRadius:10,display:"flex",alignItems:"center",justifyContent:"center",background:isT?T.accent:T.surfaceAlt,color:isT?"#fff":T.text,fontWeight:700,fontSize:13,fontFamily:"Outfit"}}>{DAYS[di]}</span>
+              <span style={{fontSize:13,color:isT?T.accent:T.textMuted,fontWeight:500}}>{fmtDateKr(d)} {isT&&"· 오늘"}</span>
+            </div>
+            <div style={{display:"flex",flexDirection:"column",gap:6,paddingLeft:8}}>
+              {dt.map(t => <CheckItem key={t.id} task={t} cat={cats.find(c=>c.id===t.categoryId)} checked={!!checks[`${t.id}_${ds}`]} onToggle={()=>onToggle(t.id,ds)}/>)}
+              {dt.length===0 && <div style={{padding:"8px 16px",fontSize:13,color:T.textMuted}}>업무 없음</div>}
+            </div>
+          </div>
+        );
+      })}
+
+      {vm==="month" && mw.map(w => {
+        const ws = new Date(yr,mo,w.start), we = new Date(yr,mo,Math.min(w.end,new Date(yr,mo+1,0).getDate()));
+        const wdl = []; for(let d=new Date(ws);d<=we;d.setDate(d.getDate()+1)){if(d.getDay()!==0&&d.getDay()!==6)wdl.push(new Date(d));}
+        const all = wdl.flatMap(d=>tasks.filter(t=>shouldShow(t,d)&&cf(t)&&sf(t,fmtDate(d))).map(t=>({...t,_d:fmtDate(d),_dk:fmtDateKr(d)})));
+        const uniq=[],seen=new Set(); all.forEach(t=>{const k=`${t.id}_${t._d}`;if(!seen.has(k)){seen.add(k);uniq.push(t);}});
+        return (
+          <div key={w.week} style={{marginBottom:20}}>
+            <div style={{fontSize:14,fontWeight:700,color:T.text,marginBottom:10,padding:"8px 14px",background:T.surfaceAlt,borderRadius:10}}>
+              {w.week}주차 <span style={{fontWeight:400,color:T.textMuted}}>({w.start}일 ~ {w.end}일)</span>
+            </div>
+            <div style={{display:"flex",flexDirection:"column",gap:6,paddingLeft:8}}>
+              {uniq.sort((a,b)=>PRIORITY_ORDER[a.priority]-PRIORITY_ORDER[b.priority]).map(t =>
+                <CheckItem key={`${t.id}_${t._d}`} task={t} cat={cats.find(c=>c.id===t.categoryId)} checked={!!checks[`${t.id}_${t._d}`]} onToggle={()=>onToggle(t.id,t._d)} showDate={t._dk}/>
+              )}
+              {uniq.length===0 && <div style={{padding:"8px 16px",fontSize:13,color:T.textMuted}}>이 주차에 해당하는 업무 없음</div>}
+            </div>
+          </div>
+        );
+      })}
+    </div>
+  );
+}
+
+// ─── Icon Picker ───
+const ICON_OPTIONS = [
+  "📌","🌿","🛡️","📄","💬","🎪","📞","🏫","📚","✏️","🎨","🧹","🔔","💡","📊",
+  "🗂️","📝","🎯","⏰","🧪","🔬","💻","🎵","⚽","🏃","❤️","⭐","🔑","🎁","📣",
+  "🍎","🌍","🧮","📐","🎒","🏆","👨‍👩‍👧‍👦","🤝","📅","✅","🚸","🩺","🔧","🧩","🎭",
+];
+
+function IconPicker({ value, onChange }) {
+  const [open, setOpen] = useState(false);
+  return (
+    <div style={{position:"relative"}}>
+      <button onClick={()=>setOpen(!open)} style={{width:50,height:44,borderRadius:10,border:`1px solid ${T.border}`,background:T.surface,fontSize:22,cursor:"pointer",display:"flex",alignItems:"center",justifyContent:"center"}}>
+        {value || "📌"}
+      </button>
+      {open && (
+        <div style={{position:"absolute",bottom:"calc(100% + 8px)",left:0,background:T.surface,border:`1px solid ${T.border}`,borderRadius:14,padding:12,boxShadow:T.shadowLg,zIndex:200,width:260}}>
+          <div style={{fontSize:12,fontWeight:600,color:T.textMuted,marginBottom:8}}>아이콘 선택</div>
+          <div style={{display:"grid",gridTemplateColumns:"repeat(9,1fr)",gap:4}}>
+            {ICON_OPTIONS.map((ic,i)=>(
+              <button key={i} onClick={()=>{onChange(ic);setOpen(false);}}
+                style={{width:26,height:26,borderRadius:6,border:value===ic?`2px solid ${T.accent}`:"1px solid transparent",background:value===ic?T.accentLight+"44":"transparent",fontSize:15,cursor:"pointer",display:"flex",alignItems:"center",justifyContent:"center",padding:0,transition:"all 0.15s"}}>
+                {ic}
+              </button>
+            ))}
+          </div>
+        </div>
+      )}
+    </div>
+  );
+}
+
+// ─── Task Manage ───
+function Manage({ tasks, setTasks, cats, setCats }) {
+  const [editing, setEditing] = useState(null);
+  const [showForm, setShowForm] = useState(false);
+  const [showCF, setShowCF] = useState(false);
+  const empty = {name:"",categoryId:cats[0]?.id||"",repeatType:"weekly",repeatDay:0,repeatWeek:1,priority:"medium",memo:""};
+  const [form, setForm] = useState(empty);
+  const [nc, setNc] = useState({name:"",color:"#60a5fa",icon:"📌"});
+
+  const openNew = ()=>{setForm(empty);setEditing(null);setShowForm(true);};
+  const openEdit = t=>{setForm({...t});setEditing(t.id);setShowForm(true);};
+  const saveTask = ()=>{
+    if(!form.name.trim()) return;
+    if(editing) setTasks(p=>p.map(t=>t.id===editing?{...form,id:editing}:t));
+    else setTasks(p=>[...p,{...form,id:uid()}]);
+    setShowForm(false);
+  };
+  const delTask = id=>{setTasks(p=>p.filter(t=>t.id!==id));if(editing===id)setShowForm(false);};
+  const addCat = ()=>{if(!nc.name.trim())return;setCats(p=>[...p,{...nc,id:uid()}]);setNc({name:"",color:"#60a5fa",icon:"📌"});setShowCF(false);};
+  const delCat = id=>{if(DEFAULT_CATEGORIES.find(c=>c.id===id))return;setCats(p=>p.filter(c=>c.id!==id));};
+
+  return (
+    <div>
+      <div style={{display:"flex",justifyContent:"space-between",alignItems:"center",marginBottom:20}}>
+        <h1 style={{fontFamily:"Outfit",fontSize:28,fontWeight:800,margin:0,color:T.text}}>업무 관리</h1>
+        <button onClick={openNew} style={{padding:"10px 20px",borderRadius:25,border:"none",background:T.accent,color:"#fff",fontWeight:600,fontSize:14,cursor:"pointer",fontFamily:"'Noto Sans KR'"}}>+ 새 업무</button>
+      </div>
+
+      {showForm && (
+        <div style={{position:"fixed",inset:0,background:"rgba(0,0,0,0.4)",zIndex:100,display:"flex",alignItems:"center",justifyContent:"center",padding:20}} onClick={()=>setShowForm(false)}>
+          <div onClick={e=>e.stopPropagation()} style={{background:T.surface,borderRadius:20,padding:28,width:"100%",maxWidth:420,boxShadow:T.shadowLg,maxHeight:"80vh",overflowY:"auto"}}>
+            <h2 style={{fontSize:18,fontWeight:700,margin:"0 0 20px",color:T.text}}>{editing?"업무 수정":"새 업무 등록"}</h2>
+
+            <label style={labelSt}>업무명</label>
+            <input value={form.name} onChange={e=>setForm({...form,name:e.target.value})} placeholder="업무명을 입력하세요" style={inputSt}/>
+
+            <label style={labelSt}>카테고리</label>
+            <select value={form.categoryId} onChange={e=>setForm({...form,categoryId:e.target.value})} style={inputSt}>
+              {cats.map(c=><option key={c.id} value={c.id}>{c.icon} {c.name}</option>)}
+            </select>
+
+            <label style={labelSt}>반복 주기</label>
+            <select value={form.repeatType} onChange={e=>setForm({...form,repeatType:e.target.value})} style={inputSt}>
+              {Object.entries(REPEAT_TYPES).map(([k,v])=><option key={k} value={k}>{v}</option>)}
+            </select>
+
+            {form.repeatType==="weekly" && <>
+              <label style={labelSt}>요일</label>
+              <div style={{display:"flex",gap:6,marginBottom:14}}>
+                {DAYS.map((d,i)=><button key={i} onClick={()=>setForm({...form,repeatDay:i})} style={{flex:1,padding:"8px 0",borderRadius:10,border:`1px solid ${T.border}`,background:form.repeatDay===i?T.accent:T.surface,color:form.repeatDay===i?"#fff":T.text,fontWeight:600,fontSize:13,cursor:"pointer",fontFamily:"'Noto Sans KR'"}}>{d}</button>)}
+              </div>
+            </>}
+
+            {form.repeatType==="monthly" && <>
+              <label style={labelSt}>주차</label>
+              <div style={{display:"flex",gap:6,marginBottom:14}}>
+                {[1,2,3,4,5].map(w=><button key={w} onClick={()=>setForm({...form,repeatWeek:w})} style={{flex:1,padding:"8px 0",borderRadius:10,border:`1px solid ${T.border}`,background:form.repeatWeek===w?T.accent:T.surface,color:form.repeatWeek===w?"#fff":T.text,fontWeight:600,fontSize:13,cursor:"pointer",fontFamily:"'Noto Sans KR'"}}>{w}주차</button>)}
+              </div>
+            </>}
+
+            <label style={labelSt}>우선순위</label>
+            <div style={{display:"flex",gap:6,marginBottom:14}}>
+              {Object.entries(PRIORITIES).map(([k,v])=><button key={k} onClick={()=>setForm({...form,priority:k})} style={{flex:1,padding:"8px 0",borderRadius:10,border:`1px solid ${T.border}`,background:form.priority===k?(k==="high"?"#ef4444":k==="medium"?"#f59e0b":"#6b7280"):T.surface,color:form.priority===k?"#fff":T.text,fontWeight:600,fontSize:13,cursor:"pointer",fontFamily:"'Noto Sans KR'"}}>{v}</button>)}
+            </div>
+
+            <label style={labelSt}>메모</label>
+            <textarea value={form.memo} onChange={e=>setForm({...form,memo:e.target.value})} placeholder="메모 (선택)" rows={2} style={{...inputSt,resize:"vertical"}}/>
+
+            <div style={{display:"flex",gap:10,marginTop:20}}>
+              <button onClick={saveTask} style={{flex:1,padding:"12px",borderRadius:12,border:"none",background:T.accent,color:"#fff",fontWeight:600,fontSize:15,cursor:"pointer",fontFamily:"'Noto Sans KR'"}}>{editing?"수정 완료":"등록"}</button>
+              <button onClick={()=>setShowForm(false)} style={{padding:"12px 20px",borderRadius:12,border:`1px solid ${T.border}`,background:T.surface,color:T.text,fontWeight:500,fontSize:15,cursor:"pointer",fontFamily:"'Noto Sans KR'"}}>취소</button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      <div style={{display:"flex",flexDirection:"column",gap:8,marginBottom:32}}>
+        {tasks.map((t,i) => {
+          const cat = cats.find(c=>c.id===t.categoryId);
+          return (
+            <div key={t.id} style={{display:"flex",alignItems:"center",gap:12,padding:"14px 16px",background:T.surface,borderRadius:14,border:`1px solid ${T.border}`,boxShadow:T.shadow,animation:`slideUp 0.3s ease ${i*0.04}s both`}}>
+              <div style={{flex:1}}>
+                <div style={{fontSize:14,fontWeight:600,color:T.text}}>{t.name}</div>
+                <div style={{display:"flex",gap:6,marginTop:6,flexWrap:"wrap",alignItems:"center"}}>
+                  {cat && <CatBadge cat={cat}/>}
+                  <PriBadge p={t.priority}/>
+                  <span style={{fontSize:11,color:T.textMuted}}>
+                    {REPEAT_TYPES[t.repeatType]}
+                    {t.repeatType==="weekly"&&t.repeatDay!==null&&` · ${DAYS[t.repeatDay]}요일`}
+                    {t.repeatType==="monthly"&&t.repeatWeek&&` · ${t.repeatWeek}주차`}
+                  </span>
+                </div>
+              </div>
+              <button onClick={()=>openEdit(t)} style={{...iconBtn}}>✏️</button>
+              <button onClick={()=>delTask(t.id)} style={{...iconBtn}}>🗑️</button>
+            </div>
+          );
+        })}
+        {tasks.length===0 && <div style={{textAlign:"center",padding:40,color:T.textMuted}}>등록된 업무가 없습니다. '새 업무' 버튼을 눌러 추가하세요.</div>}
+      </div>
+
+      <div style={{borderTop:`1px solid ${T.border}`,paddingTop:24}}>
+        <div style={{display:"flex",justifyContent:"space-between",alignItems:"center",marginBottom:14}}>
+          <h2 style={{fontSize:18,fontWeight:700,margin:0,color:T.text}}>카테고리 관리</h2>
+          <button onClick={()=>setShowCF(!showCF)} style={{padding:"6px 14px",borderRadius:20,border:`1px solid ${T.border}`,background:T.surface,fontSize:13,cursor:"pointer",fontFamily:"'Noto Sans KR'"}}>+ 추가</button>
+        </div>
+        {showCF && (
+          <div style={{display:"flex",gap:8,marginBottom:14,flexWrap:"wrap",alignItems:"center",padding:14,background:T.surfaceAlt,borderRadius:12}}>
+            <IconPicker value={nc.icon} onChange={v=>setNc({...nc,icon:v})}/>
+            <input value={nc.name} onChange={e=>setNc({...nc,name:e.target.value})} placeholder="카테고리명" style={{...inputSt,flex:1,minWidth:100,marginBottom:0}}/>
+            <input type="color" value={nc.color} onChange={e=>setNc({...nc,color:e.target.value})} style={{width:36,height:36,border:"none",borderRadius:8,cursor:"pointer"}}/>
+            <button onClick={addCat} style={{padding:"8px 16px",borderRadius:10,border:"none",background:T.accent,color:"#fff",fontWeight:600,fontSize:13,cursor:"pointer",fontFamily:"'Noto Sans KR'"}}>추가</button>
+          </div>
+        )}
+        <div style={{display:"flex",flexWrap:"wrap",gap:8}}>
+          {cats.map(c=>(
+            <div key={c.id} style={{display:"inline-flex",alignItems:"center",gap:6,padding:"6px 12px",borderRadius:20,background:c.color+"18",border:`1px solid ${c.color}33`}}>
+              <span>{c.icon}</span><span style={{fontSize:13,fontWeight:500,color:c.color}}>{c.name}</span>
+              {!DEFAULT_CATEGORIES.find(dc=>dc.id===c.id) && <button onClick={()=>delCat(c.id)} style={{background:"none",border:"none",cursor:"pointer",fontSize:12,color:T.textMuted,padding:0}}>✕</button>}
+            </div>
+          ))}
+        </div>
+      </div>
+    </div>
+  );
+}
+
+// ─── Stats ───
+function Stats({ tasks, cats, checks }) {
+  const today = getToday(), yr = today.getFullYear(), mo = today.getMonth();
+
+  const monthData = useMemo(()=>{
+    return [1,2,3,4,5].map(w=>{
+      let total=0,done=0; const last=new Date(yr,mo+1,0).getDate();
+      for(let d=1;d<=last;d++){const dt=new Date(yr,mo,d);if(dt.getDay()===0||dt.getDay()===6)continue;if(getWeekNumber(dt)!==w)continue;const ds=fmtDate(dt);tasks.forEach(t=>{if(shouldShow(t,dt)){total++;if(checks[`${t.id}_${ds}`])done++;}});}
+      return {week:w,total,done,rate:total>0?Math.round(done/total*100):0};
+    });
+  },[tasks,checks,yr,mo]);
+
+  const catData = useMemo(()=>{
+    return cats.map(cat=>{
+      let total=0,done=0;const last=new Date(yr,mo+1,0).getDate();
+      for(let d=1;d<=last;d++){const dt=new Date(yr,mo,d);if(dt.getDay()===0||dt.getDay()===6)continue;const ds=fmtDate(dt);tasks.filter(t=>t.categoryId===cat.id).forEach(t=>{if(shouldShow(t,dt)){total++;if(checks[`${t.id}_${ds}`])done++;}});}
+      return {...cat,total,done,rate:total>0?Math.round(done/total*100):0};
+    }).filter(c=>c.total>0).sort((a,b)=>b.total-a.total);
+  },[tasks,cats,checks,yr,mo]);
+
+  const missed = useMemo(()=>{
+    const m={};const td=getToday(),last=new Date(yr,mo+1,0).getDate();
+    for(let d=1;d<=last;d++){const dt=new Date(yr,mo,d);if(dt>td)break;if(dt.getDay()===0||dt.getDay()===6)continue;const ds=fmtDate(dt);tasks.forEach(t=>{if(shouldShow(t,dt)&&!checks[`${t.id}_${ds}`])m[t.id]=(m[t.id]||0)+1;});}
+    return Object.entries(m).map(([id,cnt])=>({task:tasks.find(t=>t.id===id),count:cnt})).filter(x=>x.task).sort((a,b)=>b.count-a.count).slice(0,5);
+  },[tasks,checks,yr,mo]);
+
+  const oT=monthData.reduce((s,w)=>s+w.total,0), oD=monthData.reduce((s,w)=>s+w.done,0);
+  const oR=oT>0?Math.round(oD/oT*100):0;
+
+  return (
+    <div>
+      <h1 style={{fontFamily:"Outfit",fontSize:28,fontWeight:800,margin:"0 0 6px",color:T.text}}>통계</h1>
+      <p style={{fontSize:13,color:T.textMuted,margin:"0 0 24px"}}>{yr}년 {mo+1}월</p>
+
+      <div style={{display:"flex",alignItems:"center",gap:24,padding:24,background:T.surface,borderRadius:20,boxShadow:T.shadow,border:`1px solid ${T.border}`,marginBottom:24,flexWrap:"wrap",justifyContent:"center"}}>
+        <ProgressRing percent={oR} size={130} stroke={12}/>
+        <div>
+          <div style={{fontSize:24,fontWeight:800,fontFamily:"Outfit",color:T.text}}>{oD} / {oT}</div>
+          <div style={{fontSize:13,color:T.textMuted}}>이번 달 완료 업무</div>
+        </div>
+      </div>
+
+      <div style={{background:T.surface,borderRadius:16,padding:20,marginBottom:24,boxShadow:T.shadow,border:`1px solid ${T.border}`}}>
+        <h3 style={{fontSize:15,fontWeight:700,margin:"0 0 16px",color:T.text}}>📊 주차별 완료율</h3>
+        <div style={{display:"flex",flexDirection:"column",gap:14}}>
+          {monthData.map(w=>(
+            <div key={w.week}>
+              <div style={{display:"flex",justifyContent:"space-between",marginBottom:4}}>
+                <span style={{fontSize:13,fontWeight:600,color:T.text}}>{w.week}주차</span>
+                <span style={{fontSize:12,color:T.textMuted}}>{w.done}/{w.total} ({w.rate}%)</span>
+              </div>
+              <div style={{height:20,background:T.surfaceAlt,borderRadius:10,overflow:"hidden"}}>
+                <div style={{height:"100%",borderRadius:10,width:`${w.rate}%`,background:`linear-gradient(90deg,${T.accent},${T.accentLight})`,transition:"width 0.8s cubic-bezier(0.4,0,0.2,1)"}}/>
+              </div>
+            </div>
+          ))}
+        </div>
+      </div>
+
+      <div style={{background:T.surface,borderRadius:16,padding:20,marginBottom:24,boxShadow:T.shadow,border:`1px solid ${T.border}`}}>
+        <h3 style={{fontSize:15,fontWeight:700,margin:"0 0 16px",color:T.text}}>🏷️ 카테고리별 완료율</h3>
+        <div style={{display:"flex",flexDirection:"column",gap:12}}>
+          {catData.map(c=>(
+            <div key={c.id} style={{display:"flex",alignItems:"center",gap:12}}>
+              <span style={{fontSize:20,width:28,textAlign:"center"}}>{c.icon}</span>
+              <div style={{flex:1}}>
+                <div style={{display:"flex",justifyContent:"space-between",marginBottom:3}}>
+                  <span style={{fontSize:13,fontWeight:500,color:T.text}}>{c.name}</span>
+                  <span style={{fontSize:12,color:T.textMuted}}>{c.rate}%</span>
+                </div>
+                <div style={{height:8,background:T.surfaceAlt,borderRadius:4,overflow:"hidden"}}>
+                  <div style={{height:"100%",borderRadius:4,background:c.color,width:`${c.rate}%`,transition:"width 0.8s ease"}}/>
+                </div>
+              </div>
+            </div>
+          ))}
+          {catData.length===0 && <div style={{fontSize:13,color:T.textMuted}}>데이터 없음</div>}
+        </div>
+      </div>
+
+      <div style={{background:T.surface,borderRadius:16,padding:20,boxShadow:T.shadow,border:`1px solid ${T.border}`}}>
+        <h3 style={{fontSize:15,fontWeight:700,margin:"0 0 16px",color:T.text}}>⚠️ 자주 놓친 업무 TOP 5</h3>
+        <div style={{display:"flex",flexDirection:"column",gap:8}}>
+          {missed.map((m,i)=>{
+            const cat=cats.find(c=>c.id===m.task.categoryId);
+            return (
+              <div key={m.task.id} style={{display:"flex",alignItems:"center",gap:12,padding:"10px 14px",background:i===0?"#fef2f2":T.bg,borderRadius:10}}>
+                <span style={{fontFamily:"Outfit",fontWeight:800,fontSize:18,color:i===0?"#ef4444":T.textMuted,width:24}}>{i+1}</span>
+                <div style={{flex:1}}>
+                  <div style={{fontSize:13,fontWeight:500,color:T.text}}>{m.task.name}</div>
+                  {cat && <CatBadge cat={cat}/>}
+                </div>
+                <span style={{fontSize:13,fontWeight:700,color:"#ef4444"}}>{m.count}회</span>
+              </div>
+            );
+          })}
+          {missed.length===0 && <div style={{textAlign:"center",padding:20,color:T.textMuted,fontSize:13}}>놓친 업무가 없습니다! 🎉</div>}
+        </div>
+      </div>
+    </div>
+  );
+}
+
+// ─── App ───
+function App() {
+  const [page, setPage] = useState("dashboard");
+  const [tasks, setTasks] = useState(()=>load("cc_tasks",SAMPLE_TASKS));
+  const [cats, setCats] = useState(()=>load("cc_cats",DEFAULT_CATEGORIES));
+  const [checks, setChecks] = useState(()=>load("cc_checks",{}));
+
+  useEffect(()=>{save("cc_tasks",tasks);},[tasks]);
+  useEffect(()=>{save("cc_cats",cats);},[cats]);
+  useEffect(()=>{save("cc_checks",checks);},[checks]);
+
+  const toggle = useCallback((tid,ds)=>{
+    setChecks(p=>{const k=`${tid}_${ds}`,n={...p};if(n[k])delete n[k];else n[k]=new Date().toISOString();return n;});
+  },[]);
+
+  const reset = ()=>{if(confirm("모든 데이터를 초기화하시겠습니까? 이 작업은 되돌릴 수 없습니다.")){setTasks(SAMPLE_TASKS);setCats(DEFAULT_CATEGORIES);setChecks({});}};
+
+  return (
+    <div style={{minHeight:"100vh",background:T.bg,fontFamily:"'Noto Sans KR',sans-serif",color:T.text}}>
+      <div style={{position:"sticky",top:0,zIndex:50,background:T.bg+"ee",backdropFilter:"blur(10px)",borderBottom:`1px solid ${T.border}`,padding:"12px 20px",display:"flex",justifyContent:"space-between",alignItems:"center"}}>
+        <div style={{display:"flex",alignItems:"center",gap:8}}>
+          <span style={{fontSize:24}}>📋</span>
+          <span style={{fontFamily:"Outfit",fontWeight:800,fontSize:16,color:T.text,letterSpacing:-0.5}}>학급 업무 체크리스트</span>
+        </div>
+        <button onClick={reset} style={{padding:"6px 12px",borderRadius:16,border:`1px solid ${T.border}`,background:T.surface,fontSize:11,color:T.textMuted,cursor:"pointer",fontFamily:"'Noto Sans KR'"}}>🔄 초기화</button>
+      </div>
+
+      <div style={{maxWidth:520,margin:"0 auto",padding:"20px 16px 100px"}}>
+        {page==="dashboard" && <Dashboard tasks={tasks} cats={cats} checks={checks} onToggle={toggle}/>}
+        {page==="checklist" && <Checklist tasks={tasks} cats={cats} checks={checks} onToggle={toggle}/>}
+        {page==="manage" && <Manage tasks={tasks} setTasks={setTasks} cats={cats} setCats={setCats}/>}
+        {page==="stats" && <Stats tasks={tasks} cats={cats} checks={checks}/>}
+      </div>
+
+      <div style={{position:"fixed",bottom:0,left:0,right:0,background:T.surface+"f5",backdropFilter:"blur(12px)",borderTop:`1px solid ${T.border}`,display:"flex",justifyContent:"space-around",padding:"6px 0 8px",zIndex:50}}>
+        <NavBtn active={page==="dashboard"} icon="🏠" label="대시보드" onClick={()=>setPage("dashboard")}/>
+        <NavBtn active={page==="checklist"} icon="✅" label="체크리스트" onClick={()=>setPage("checklist")}/>
+        <NavBtn active={page==="manage"} icon="⚙️" label="업무관리" onClick={()=>setPage("manage")}/>
+        <NavBtn active={page==="stats"} icon="📊" label="통계" onClick={()=>setPage("stats")}/>
+      </div>
+    </div>
+  );
+}
+
+ReactDOM.createRoot(document.getElementById("root")).render(<App/>);
+</script>
+</body>
+</html>
