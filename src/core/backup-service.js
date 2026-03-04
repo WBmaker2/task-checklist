@@ -1,5 +1,6 @@
 (function () {
   const BACKUP_TABLE = "user_backups";
+  const DEFAULT_VERSION = 1;
 
   let initialized = false;
   let client = null;
@@ -73,12 +74,12 @@
   function onAuthStateChanged(callback) {
     const state = ensureInitialized();
     if (!state.ok) {
-      callback(null);
+      callback(null, "SERVICE_UNAVAILABLE");
       return () => {};
     }
 
-    const { data } = state.client.auth.onAuthStateChange((_event, session) => {
-      callback(session?.user || null);
+    const { data } = state.client.auth.onAuthStateChange((event, session) => {
+      callback(session?.user || null, event);
     });
 
     return () => {
@@ -116,26 +117,111 @@
     }
   }
 
-  async function backupUserData(userId, payload) {
-    const state = assertReady();
-    const safePayload = {
-      user_id: userId,
-      tasks: Array.isArray(payload.tasks) ? payload.tasks : [],
-      cats: Array.isArray(payload.cats) ? payload.cats : [],
-      checks: payload.checks && typeof payload.checks === "object" ? payload.checks : {},
-      updated_at_client: new Date().toISOString(),
-      version: 3,
-    };
+  function normalizeVersion(value) {
+    const n = Number(value);
+    return Number.isFinite(n) && n > 0 ? Math.floor(n) : null;
+  }
 
-    const { error } = await state.client
+  function conflictError(message, meta) {
+    const error = new Error(message);
+    error.code = "backup-conflict";
+    error.meta = meta || {};
+    return error;
+  }
+
+  async function fetchBackupMeta(userId) {
+    const state = assertReady();
+
+    const { data, error } = await state.client
       .from(BACKUP_TABLE)
-      .upsert(safePayload, { onConflict: "user_id" });
+      .select("updated_at,updated_at_client,version")
+      .eq("user_id", userId)
+      .maybeSingle();
 
     if (error) {
       throw error;
     }
 
-    return safePayload;
+    if (!data) {
+      return { exists: false, updatedAtClient: null, updatedAt: null, version: null };
+    }
+
+    return {
+      exists: true,
+      updatedAtClient: data.updated_at_client || null,
+      updatedAt: data.updated_at || null,
+      version: normalizeVersion(data.version),
+    };
+  }
+
+  async function backupUserData(userId, payload, options) {
+    const state = assertReady();
+    const opts = options || {};
+    const force = Boolean(opts.force);
+    const baseVersion = normalizeVersion(opts.baseVersion);
+    const now = new Date().toISOString();
+
+    const currentMeta = await fetchBackupMeta(userId);
+    if (currentMeta.exists && !force) {
+      if (!baseVersion || baseVersion !== currentMeta.version) {
+        throw conflictError("서버에 더 최신 데이터가 있습니다. 복원 또는 강제 업로드를 선택해 주세요.", {
+          serverVersion: currentMeta.version,
+          serverUpdatedAt: currentMeta.updatedAt,
+        });
+      }
+    }
+
+    const nextVersion = currentMeta.exists ? (currentMeta.version || DEFAULT_VERSION) + 1 : DEFAULT_VERSION;
+    const safePayload = {
+      user_id: userId,
+      tasks: Array.isArray(payload.tasks) ? payload.tasks : [],
+      cats: Array.isArray(payload.cats) ? payload.cats : [],
+      checks: payload.checks && typeof payload.checks === "object" ? payload.checks : {},
+      updated_at_client: now,
+      version: nextVersion,
+    };
+
+    if (!currentMeta.exists) {
+      const { error } = await state.client.from(BACKUP_TABLE).insert(safePayload);
+      if (error) {
+        throw error;
+      }
+    } else {
+      let query = state.client
+        .from(BACKUP_TABLE)
+        .update({
+          tasks: safePayload.tasks,
+          cats: safePayload.cats,
+          checks: safePayload.checks,
+          updated_at_client: safePayload.updated_at_client,
+          version: safePayload.version,
+        })
+        .eq("user_id", userId);
+
+      if (!force && baseVersion) {
+        query = query.eq("version", baseVersion);
+      }
+
+      const { data, error } = await query.select("version,updated_at,updated_at_client").maybeSingle();
+      if (error) {
+        throw error;
+      }
+
+      if (!data) {
+        throw conflictError("동기화 도중 서버 데이터가 변경되었습니다. 다시 시도해 주세요.", {
+          serverVersion: currentMeta.version,
+          serverUpdatedAt: currentMeta.updatedAt,
+        });
+      }
+    }
+
+    const latest = await fetchBackupMeta(userId);
+    return {
+      ...safePayload,
+      version: latest.version || nextVersion,
+      updatedAt: latest.updatedAt || null,
+      updatedAtClient: latest.updatedAtClient || now,
+    };
   }
 
   async function restoreUserData(userId) {
@@ -161,31 +247,39 @@
       checks: data.checks && typeof data.checks === "object" ? data.checks : {},
       updatedAtClient: data.updated_at_client || null,
       updatedAt: data.updated_at || null,
-      version: data.version || 1,
+      version: normalizeVersion(data.version) || DEFAULT_VERSION,
     };
   }
 
-  async function fetchBackupMeta(userId) {
-    const state = assertReady();
-
-    const { data, error } = await state.client
-      .from(BACKUP_TABLE)
-      .select("updated_at,updated_at_client")
-      .eq("user_id", userId)
-      .maybeSingle();
-
-    if (error) {
-      throw error;
+  function subscribeBackupChanges(userId, callback) {
+    const state = ensureInitialized();
+    if (!state.ok || !userId) {
+      return () => {};
     }
 
-    if (!data) {
-      return { exists: false, updatedAtClient: null, updatedAt: null };
-    }
+    const channelName = `user-backups-${userId}-${Date.now()}`;
+    const channel = state.client
+      .channel(channelName)
+      .on(
+        "postgres_changes",
+        {
+          event: "*",
+          schema: "public",
+          table: BACKUP_TABLE,
+          filter: `user_id=eq.${userId}`,
+        },
+        (payload) => {
+          callback(payload);
+        },
+      )
+      .subscribe();
 
-    return {
-      exists: true,
-      updatedAtClient: data.updated_at_client || null,
-      updatedAt: data.updated_at || null,
+    return () => {
+      try {
+        channel.unsubscribe();
+      } finally {
+        state.client.removeChannel(channel);
+      }
     };
   }
 
@@ -200,5 +294,6 @@
     backupUserData,
     restoreUserData,
     fetchBackupMeta,
+    subscribeBackupChanges,
   };
 })();
