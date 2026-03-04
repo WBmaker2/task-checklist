@@ -1,0 +1,22 @@
+{
+  "name": "task-checklist",
+  "version": "1.0.0",
+  "description": "학급 업무 체크리스트 웹앱입니다.",
+  "private": true,
+  "scripts": {
+    "build": "node scripts/build.mjs",
+    "serve": "python3 -m http.server 4174"
+  },
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/WBmaker2/task-checklist.git"
+  },
+  "license": "ISC",
+  "bugs": {
+    "url": "https://github.com/WBmaker2/task-checklist/issues"
+  },
+  "homepage": "https://github.com/WBmaker2/task-checklist#readme",
+  "devDependencies": {
+    "esbuild": "^0.27.3"
+  }
+}

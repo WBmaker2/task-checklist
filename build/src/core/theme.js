@@ -1,0 +1,15 @@
+window.AppTheme = {
+  bg: "#f0ebe3",
+  surface: "#faf8f5",
+  surfaceAlt: "#e8e2d9",
+  text: "#2c2418",
+  textMuted: "#8a7e6e",
+  accent: "#d4763c",
+  accentLight: "#f0c8a8",
+  accentDark: "#b05e2a",
+  border: "#ddd5c8",
+  success: "#4ade80",
+  danger: "#f87171",
+  shadow: "0 2px 16px rgba(44,36,24,0.08)",
+  shadowLg: "0 8px 32px rgba(44,36,24,0.12)"
+};

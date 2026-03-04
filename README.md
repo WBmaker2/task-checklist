@@ -4,11 +4,23 @@
 
 ## 구조
 
-- `index.html`: 엔트리 파일
-- `styles/main.css`: 전역 스타일
+- `index.html`: 배포 엔트리 파일 (Babel 런타임 미사용)
+- `scripts/build.mjs`: JSX 사전 컴파일 스크립트(esbuild)
+- `build/*`: 배포 산출물(JS/CSS/아이콘)
+- `styles/main.css`: 원본 전역 스타일
 - `src/core/*`: 상수/테마/유틸/공통 컴포넌트/백업 서비스
 - `src/pages/*`: 화면 단위 컴포넌트
 - `src/config/supabase-config.js`: Supabase 연결 설정
+
+## 개발/배포
+
+```bash
+npm install
+npm run build
+```
+
+- `npm run build` 실행 시 `src/*.js`(JSX 포함)를 `build/src/*.js`로 사전 컴파일합니다.
+- 배포 시 `index.html`은 `build/*` 산출물만 로드하며, 브라우저 Babel(`babel-standalone`)을 사용하지 않습니다.
 
 ## 백업
 
