@@ -1,6 +1,6 @@
 (function () {
   const T = window.AppTheme;
-  const { getToday, getWeekNumber, fmtDate, shouldShow } = window.AppUtils;
+  const { getToday, getWeekNumber, fmtDate, getFirstWorkdayOfMonthWeek, shouldShow } = window.AppUtils;
   const { ProgressRing, CatBadge } = window.AppComponents;
 
   function Stats({ tasks, cats, checks }) {
@@ -8,96 +8,81 @@
     const yr = today.getFullYear();
     const mo = today.getMonth();
 
-    const monthData = React.useMemo(() => {
-      return [1, 2, 3, 4, 5].map((w) => {
-        let total = 0;
-        let done = 0;
-        const last = new Date(yr, mo + 1, 0).getDate();
-
-        for (let d = 1; d <= last; d += 1) {
-          const dt = new Date(yr, mo, d);
-          if (dt.getDay() === 0 || dt.getDay() === 6) {
-            continue;
-          }
-          if (getWeekNumber(dt) !== w) {
-            continue;
-          }
-
-          const ds = fmtDate(dt);
-          tasks.forEach((t) => {
-            if (shouldShow(t, dt)) {
-              total += 1;
-              if (checks[`${t.id}_${ds}`]) {
-                done += 1;
-              }
-            }
-          });
-        }
-
-        return { week: w, total, done, rate: total > 0 ? Math.round((done / total) * 100) : 0 };
-      });
-    }, [tasks, checks, yr, mo]);
-
-    const catData = React.useMemo(() => {
-      return cats
-        .map((cat) => {
-          let total = 0;
-          let done = 0;
-          const last = new Date(yr, mo + 1, 0).getDate();
-
-          for (let d = 1; d <= last; d += 1) {
-            const dt = new Date(yr, mo, d);
-            if (dt.getDay() === 0 || dt.getDay() === 6) {
-              continue;
-            }
-
-            const ds = fmtDate(dt);
-            tasks
-              .filter((t) => t.categoryId === cat.id)
-              .forEach((t) => {
-                if (shouldShow(t, dt)) {
-                  total += 1;
-                  if (checks[`${t.id}_${ds}`]) {
-                    done += 1;
-                  }
-                }
-              });
-          }
-
-          return { ...cat, total, done, rate: total > 0 ? Math.round((done / total) * 100) : 0 };
-        })
-        .filter((c) => c.total > 0)
-        .sort((a, b) => b.total - a.total);
-    }, [tasks, cats, checks, yr, mo]);
-
-    const missed = React.useMemo(() => {
-      const m = {};
-      const td = getToday();
+    const monthOccurrences = React.useMemo(() => {
+      const occurrences = [];
       const last = new Date(yr, mo + 1, 0).getDate();
 
       for (let d = 1; d <= last; d += 1) {
         const dt = new Date(yr, mo, d);
-        if (dt > td) {
-          break;
-        }
         if (dt.getDay() === 0 || dt.getDay() === 6) {
           continue;
         }
 
         const ds = fmtDate(dt);
         tasks.forEach((t) => {
-          if (shouldShow(t, dt) && !checks[`${t.id}_${ds}`]) {
-            m[t.id] = (m[t.id] || 0) + 1;
+          if (t.repeatType !== "monthly" && shouldShow(t, dt)) {
+            occurrences.push({ task: t, ds, week: getWeekNumber(dt), date: dt });
           }
         });
       }
+
+      for (let week = 1; week <= 5; week += 1) {
+        const anchor = getFirstWorkdayOfMonthWeek(yr, mo, week);
+        if (!anchor) {
+          continue;
+        }
+
+        const ds = fmtDate(anchor);
+        tasks.forEach((t) => {
+          if (t.repeatType === "monthly" && t.repeatWeek === week) {
+            occurrences.push({ task: t, ds, week, date: anchor });
+          }
+        });
+      }
+
+      return occurrences;
+    }, [tasks, yr, mo]);
+
+    const monthData = React.useMemo(() => {
+      return [1, 2, 3, 4, 5].map((w) => {
+        const occurrences = monthOccurrences.filter((item) => item.week === w);
+        const total = occurrences.length;
+        const done = occurrences.filter((item) => checks[`${item.task.id}_${item.ds}`]).length;
+
+        return { week: w, total, done, rate: total > 0 ? Math.round((done / total) * 100) : 0 };
+      });
+    }, [monthOccurrences, checks]);
+
+    const catData = React.useMemo(() => {
+      return cats
+        .map((cat) => {
+          const occurrences = monthOccurrences.filter((item) => item.task.categoryId === cat.id);
+          const total = occurrences.length;
+          const done = occurrences.filter((item) => checks[`${item.task.id}_${item.ds}`]).length;
+
+          return { ...cat, total, done, rate: total > 0 ? Math.round((done / total) * 100) : 0 };
+        })
+        .filter((c) => c.total > 0)
+        .sort((a, b) => b.total - a.total);
+    }, [monthOccurrences, cats, checks]);
+
+    const missed = React.useMemo(() => {
+      const m = {};
+      monthOccurrences.forEach((item) => {
+        if (item.date > today) {
+          return;
+        }
+        if (!checks[`${item.task.id}_${item.ds}`]) {
+          m[item.task.id] = (m[item.task.id] || 0) + 1;
+        }
+      });
 
       return Object.entries(m)
         .map(([id, cnt]) => ({ task: tasks.find((t) => t.id === id), count: cnt }))
         .filter((x) => x.task)
         .sort((a, b) => b.count - a.count)
         .slice(0, 5);
-    }, [tasks, checks, yr, mo]);
+    }, [monthOccurrences, tasks, checks, today]);
 
     const oT = monthData.reduce((s, w) => s + w.total, 0);
     const oD = monthData.reduce((s, w) => s + w.done, 0);

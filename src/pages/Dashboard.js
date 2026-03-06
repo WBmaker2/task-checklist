@@ -11,13 +11,31 @@
     const selStr = fmtDate(selDate);
     const isToday = fmtDate(selDate) === fmtDate(realToday);
 
+    const weekScopedTasks = tasks
+      .filter((t) => t.repeatType === "monthly")
+      .map((t) => {
+        const anchor = weekDates.find((d) => shouldShow(t, d));
+        if (!anchor) {
+          return null;
+        }
+
+        return { task: t, date: fmtDate(anchor) };
+      })
+      .filter(Boolean)
+      .sort((a, b) => PRIORITY_ORDER[a.task.priority] - PRIORITY_ORDER[b.task.priority]);
+
     const dayTasks = tasks
-      .filter((t) => shouldShow(t, selDate))
+      .filter((t) => t.repeatType !== "monthly" && shouldShow(t, selDate))
       .sort((a, b) => PRIORITY_ORDER[a.priority] - PRIORITY_ORDER[b.priority]);
 
-    const weekTasks = weekDates.flatMap((d) =>
-      tasks.filter((t) => shouldShow(t, d)).map((t) => ({ task: t, date: fmtDate(d) }))
-    );
+    const weekTasks = [
+      ...weekScopedTasks,
+      ...weekDates.flatMap((d) =>
+        tasks
+          .filter((t) => t.repeatType !== "monthly" && shouldShow(t, d))
+          .map((t) => ({ task: t, date: fmtDate(d) }))
+      ),
+    ];
 
     const wTotal = weekTasks.length;
     const wDone = weekTasks.filter((wt) => checks[`${wt.task.id}_${wt.date}`]).length;
@@ -185,7 +203,7 @@
 
           <div style={{ display: "flex", gap: 8 }}>
             {weekDates.map((d, i) => {
-              const dt = tasks.filter((t) => shouldShow(t, d));
+              const dt = tasks.filter((t) => t.repeatType !== "monthly" && shouldShow(t, d));
               const dd = dt.filter((t) => checks[`${t.id}_${fmtDate(d)}`]).length;
               const dtl = dt.length;
               const isSel = fmtDate(d) === selStr;
@@ -233,6 +251,33 @@
             })}
           </div>
         </div>
+
+        {weekScopedTasks.length > 0 && (
+          <div
+            style={{
+              background: T.surface,
+              borderRadius: 16,
+              padding: 20,
+              marginBottom: 24,
+              boxShadow: T.shadow,
+              border: `1px solid ${T.border}`,
+            }}
+          >
+            <h3 style={{ fontSize: 15, fontWeight: 700, margin: "0 0 12px", color: T.text }}>📌 이 주의 업무</h3>
+            <div style={{ display: "flex", flexDirection: "column", gap: 8 }}>
+              {weekScopedTasks.map(({ task, date }, i) => (
+                <CheckItem
+                  key={`${task.id}_${date}`}
+                  task={task}
+                  cat={cats.find((c) => c.id === task.categoryId)}
+                  checked={!!checks[`${task.id}_${date}`]}
+                  onToggle={() => onToggle(task.id, date)}
+                  delay={i * 0.05}
+                />
+              ))}
+            </div>
+          </div>
+        )}
 
         <h3 style={{ fontSize: 15, fontWeight: 700, margin: "0 0 12px", color: T.text }}>
           {pending.length > 0 ? "⚡ 남은 업무" : "✨ 업무를 모두 완료했어요!"}

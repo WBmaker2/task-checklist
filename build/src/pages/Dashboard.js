@@ -9,10 +9,20 @@
     const weekDates = getWeekDates(selDate);
     const selStr = fmtDate(selDate);
     const isToday = fmtDate(selDate) === fmtDate(realToday);
-    const dayTasks = tasks.filter((t) => shouldShow(t, selDate)).sort((a, b) => PRIORITY_ORDER[a.priority] - PRIORITY_ORDER[b.priority]);
-    const weekTasks = weekDates.flatMap(
-      (d) => tasks.filter((t) => shouldShow(t, d)).map((t) => ({ task: t, date: fmtDate(d) }))
-    );
+    const weekScopedTasks = tasks.filter((t) => t.repeatType === "monthly").map((t) => {
+      const anchor = weekDates.find((d) => shouldShow(t, d));
+      if (!anchor) {
+        return null;
+      }
+      return { task: t, date: fmtDate(anchor) };
+    }).filter(Boolean).sort((a, b) => PRIORITY_ORDER[a.task.priority] - PRIORITY_ORDER[b.task.priority]);
+    const dayTasks = tasks.filter((t) => t.repeatType !== "monthly" && shouldShow(t, selDate)).sort((a, b) => PRIORITY_ORDER[a.priority] - PRIORITY_ORDER[b.priority]);
+    const weekTasks = [
+      ...weekScopedTasks,
+      ...weekDates.flatMap(
+        (d) => tasks.filter((t) => t.repeatType !== "monthly" && shouldShow(t, d)).map((t) => ({ task: t, date: fmtDate(d) }))
+      )
+    ];
     const wTotal = weekTasks.length;
     const wDone = weekTasks.filter((wt) => checks[`${wt.task.id}_${wt.date}`]).length;
     const wPct = wTotal > 0 ? wDone / wTotal * 100 : 0;
@@ -144,7 +154,7 @@
       },
       /* @__PURE__ */ React.createElement("h3", { style: { fontSize: 15, fontWeight: 700, margin: "0 0 14px", color: T.text } }, "📅 이번 주 요약 ", /* @__PURE__ */ React.createElement("span", { style: { fontSize: 11, fontWeight: 400, color: T.textMuted } }, "· 날짜를 눌러 이동")),
       /* @__PURE__ */ React.createElement("div", { style: { display: "flex", gap: 8 } }, weekDates.map((d, i) => {
-        const dt = tasks.filter((t) => shouldShow(t, d));
+        const dt = tasks.filter((t) => t.repeatType !== "monthly" && shouldShow(t, d));
         const dd = dt.filter((t) => checks[`${t.id}_${fmtDate(d)}`]).length;
         const dtl = dt.length;
         const isSel = fmtDate(d) === selStr;
@@ -189,6 +199,30 @@
           )
         );
       }))
+    ), weekScopedTasks.length > 0 && /* @__PURE__ */ React.createElement(
+      "div",
+      {
+        style: {
+          background: T.surface,
+          borderRadius: 16,
+          padding: 20,
+          marginBottom: 24,
+          boxShadow: T.shadow,
+          border: `1px solid ${T.border}`
+        }
+      },
+      /* @__PURE__ */ React.createElement("h3", { style: { fontSize: 15, fontWeight: 700, margin: "0 0 12px", color: T.text } }, "📌 이 주의 업무"),
+      /* @__PURE__ */ React.createElement("div", { style: { display: "flex", flexDirection: "column", gap: 8 } }, weekScopedTasks.map(({ task, date }, i) => /* @__PURE__ */ React.createElement(
+        CheckItem,
+        {
+          key: `${task.id}_${date}`,
+          task,
+          cat: cats.find((c) => c.id === task.categoryId),
+          checked: !!checks[`${task.id}_${date}`],
+          onToggle: () => onToggle(task.id, date),
+          delay: i * 0.05
+        }
+      )))
     ), /* @__PURE__ */ React.createElement("h3", { style: { fontSize: 15, fontWeight: 700, margin: "0 0 12px", color: T.text } }, pending.length > 0 ? "⚡ 남은 업무" : "✨ 업무를 모두 완료했어요!"), /* @__PURE__ */ React.createElement("div", { style: { display: "flex", flexDirection: "column", gap: 8 } }, dayTasks.map((t, i) => /* @__PURE__ */ React.createElement(
       CheckItem,
       {

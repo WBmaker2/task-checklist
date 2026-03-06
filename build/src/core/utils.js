@@ -2,6 +2,10 @@
   function getToday() {
     return /* @__PURE__ */ new Date();
   }
+  function isWorkday(date) {
+    const day = date.getDay();
+    return day !== 0 && day !== 6;
+  }
   function getWeekNumber(date) {
     return Math.ceil(new Date(date).getDate() / 7);
   }
@@ -36,9 +40,22 @@
     }
     return weeks;
   }
+  function getFirstWorkdayOfMonthWeek(year, month, week) {
+    const target = getMonthWeeks(year, month).find((item) => item.week === week);
+    if (!target) {
+      return null;
+    }
+    for (let day = target.start; day <= target.end; day += 1) {
+      const date = new Date(year, month, day);
+      if (isWorkday(date)) {
+        return date;
+      }
+    }
+    return null;
+  }
   function shouldShow(task, date) {
     const dow = date.getDay();
-    if (dow === 0 || dow === 6) {
+    if (!isWorkday(date)) {
       return false;
     }
     const mapped = dow === 0 ? 6 : dow - 1;
@@ -83,11 +100,13 @@
   }
   window.AppUtils = {
     getToday,
+    isWorkday,
     getWeekNumber,
     getWeekDates,
     fmtDate,
     fmtDateKr,
     getMonthWeeks,
+    getFirstWorkdayOfMonthWeek,
     shouldShow,
     uid,
     load,
