@@ -1,5 +1,5 @@
 (function () {
-  const APP_VERSION = "v2.0.8";
+  const APP_VERSION = "v2.0.9";
   const { SAMPLE_TASKS, DEFAULT_CATEGORIES } = window.AppConstants;
   const T = window.AppTheme;
   const { load, save } = window.AppUtils;
@@ -255,8 +255,8 @@
 
         const latest = await refreshServerMeta(user);
         const nextVersion =
-          toVersion(result.version) ||
           toVersion(latest?.version) ||
+          toVersion(result.version) ||
           toVersion(syncMetaRef.current.baseVersion) ||
           null;
 
@@ -266,10 +266,10 @@
           baseVersion: nextVersion || prev.baseVersion,
           dirty: false,
           lastBackupAt:
-            result.updatedAtClient ||
-            result.updatedAt ||
             latest?.updatedAtClient ||
             latest?.updatedAt ||
+            result.updatedAtClient ||
+            result.updatedAt ||
             prev.lastBackupAt,
         }));
         setStatus({
