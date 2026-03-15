@@ -19,6 +19,12 @@
     const busy = Boolean(syncStatus && syncStatus.busy);
     const level = syncStatus?.level || "info";
     const styles = statusStyle(level);
+    const migrationSteps = [
+      "예전 Supabase 버전에서 마지막으로 사용하던 기기를 열고 `백업 복원`으로 최신 데이터가 맞는지 확인합니다.",
+      "이 앱에서 Google 로그인을 완료합니다.",
+      "`지금 백업`을 눌러 현재 데이터를 새 Firebase 백업으로 저장합니다.",
+      "이후에는 이 버전만 사용하면 같은 Google 계정으로 자동 동기화됩니다.",
+    ];
 
     return (
       <div>
@@ -48,6 +54,80 @@
             <div style={{ padding: "8px 12px", background: T.surfaceAlt, borderRadius: 10, fontSize: 12, color: T.text }}>
               체크 기록 {Object.keys(checks).length}개
             </div>
+          </div>
+        </div>
+
+        <div
+          style={{
+            background: "#fff7ed",
+            borderRadius: 16,
+            border: "1px solid #fed7aa",
+            boxShadow: T.shadow,
+            padding: 18,
+            marginBottom: 18,
+          }}
+        >
+          <div style={{ display: "flex", alignItems: "center", gap: 10, marginBottom: 10 }}>
+            <div
+              style={{
+                width: 36,
+                height: 36,
+                borderRadius: 12,
+                background: T.accent,
+                color: "#fff",
+                display: "flex",
+                alignItems: "center",
+                justifyContent: "center",
+                fontSize: 18,
+              }}
+            >
+              ↺
+            </div>
+            <div>
+              <h3 style={{ fontSize: 15, fontWeight: 700, color: T.text, margin: 0 }}>이전 사용자 안내</h3>
+              <div style={{ fontSize: 12, color: "#9a3412", marginTop: 2 }}>
+                예전 Supabase 백업을 쓰고 있었다면 한 번만 옮기면 됩니다.
+              </div>
+            </div>
+          </div>
+
+          <div style={{ display: "grid", gap: 8 }}>
+            {migrationSteps.map((step, index) => (
+              <div
+                key={step}
+                style={{
+                  display: "flex",
+                  gap: 10,
+                  alignItems: "flex-start",
+                  padding: "10px 12px",
+                  borderRadius: 12,
+                  background: "#fffbeb",
+                  border: "1px solid #fde68a",
+                }}
+              >
+                <div
+                  style={{
+                    minWidth: 24,
+                    height: 24,
+                    borderRadius: 999,
+                    background: "#f59e0b",
+                    color: "#fff",
+                    display: "flex",
+                    alignItems: "center",
+                    justifyContent: "center",
+                    fontSize: 12,
+                    fontWeight: 700,
+                  }}
+                >
+                  {index + 1}
+                </div>
+                <div style={{ fontSize: 12, color: T.text, lineHeight: 1.55 }}>{step}</div>
+              </div>
+            ))}
+          </div>
+
+          <div style={{ fontSize: 12, color: T.textMuted, marginTop: 12, lineHeight: 1.6 }}>
+            예전 앱에서 서버 복원을 한 뒤 이 화면으로 와서 백업하면, 이후부터는 Firebase 백업만 사용해도 됩니다.
           </div>
         </div>
 
