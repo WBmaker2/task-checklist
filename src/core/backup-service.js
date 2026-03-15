@@ -2,6 +2,8 @@
   const BACKUP_COLLECTION = "userBackups";
   const DEFAULT_VERSION = 1;
   const AUTH_REDIRECT_PENDING_KEY = "cc_auth_redirect_pending";
+  const AUTH_REDIRECT_STARTED_AT_KEY = "cc_auth_redirect_started_at";
+  const AUTH_BOOTSTRAP_TIMEOUT_MS = 10000;
 
   let initialized = false;
   let app = null;
@@ -131,10 +133,12 @@
 
     if (value) {
       window.sessionStorage.setItem(AUTH_REDIRECT_PENDING_KEY, "1");
+      window.sessionStorage.setItem(AUTH_REDIRECT_STARTED_AT_KEY, String(Date.now()));
       return;
     }
 
     window.sessionStorage.removeItem(AUTH_REDIRECT_PENDING_KEY);
+    window.sessionStorage.removeItem(AUTH_REDIRECT_STARTED_AT_KEY);
   }
 
   function isRedirectPending() {
@@ -142,6 +146,15 @@
       return false;
     }
     return window.sessionStorage.getItem(AUTH_REDIRECT_PENDING_KEY) === "1";
+  }
+
+  function getRedirectStartedAt() {
+    if (!canUseSessionStorage()) {
+      return null;
+    }
+    const raw = window.sessionStorage.getItem(AUTH_REDIRECT_STARTED_AT_KEY);
+    const value = Number(raw);
+    return Number.isFinite(value) && value > 0 ? value : null;
   }
 
   function toAuthMessage(level, message) {
@@ -158,11 +171,48 @@
     }
 
     const hadPendingRedirect = isRedirectPending();
+    if (!hadPendingRedirect) {
+      authBootstrapResult = {
+        user: normalizeUser(state.auth.currentUser),
+        feedback: null,
+      };
+      authBootstrapPromise = Promise.resolve(authBootstrapResult);
+      return authBootstrapPromise;
+    }
+
+    const redirectStartedAt = getRedirectStartedAt();
 
     authBootstrapPromise = state.auth
       .getRedirectResult()
+      .then((result) => ({ timedOut: false, result }))
+      .catch((error) => {
+        throw error;
+      });
+
+    const timeoutPromise = new Promise((resolve) => {
+      window.setTimeout(() => {
+        resolve({ timedOut: true, result: null });
+      }, AUTH_BOOTSTRAP_TIMEOUT_MS);
+    });
+
+    authBootstrapPromise = Promise.race([authBootstrapPromise, timeoutPromise])
       .then((result) => {
-        const user = normalizeUser(result?.user || state.auth.currentUser);
+        if (result?.timedOut) {
+          const elapsedMs = redirectStartedAt ? Date.now() - redirectStartedAt : null;
+          authBootstrapResult = {
+            user: normalizeUser(state.auth.currentUser),
+            feedback: toAuthMessage(
+              "warn",
+              elapsedMs && elapsedMs > AUTH_BOOTSTRAP_TIMEOUT_MS
+                ? "로그인 응답이 지연되어 상태를 초기화했습니다. 다시 로그인해 주세요."
+                : "로그인 응답을 확인하지 못했습니다. 다시 로그인해 주세요."
+            ),
+          };
+          setRedirectPending(false);
+          return authBootstrapResult;
+        }
+
+        const user = normalizeUser(result?.result?.user || state.auth.currentUser);
         let feedback = null;
         if (hadPendingRedirect && user) {
           feedback = toAuthMessage("success", "Google 로그인되었습니다.");
@@ -225,7 +275,9 @@
     try {
       authBootstrapResult = null;
       authBootstrapPromise = null;
-      await state.auth.signInWithRedirect(provider);
+      state.auth.signInWithRedirect(provider).catch(() => {
+        setRedirectPending(false);
+      });
       return {
         redirecting: true,
         user: null,
