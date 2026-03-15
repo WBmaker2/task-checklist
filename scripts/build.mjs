@@ -1,6 +1,7 @@
 import { mkdir, readFile, rm, writeFile } from "node:fs/promises";
 import path from "node:path";
 import { transform } from "esbuild";
+import { ensureFirebaseConfig } from "./generate-firebase-config.mjs";
 
 const outDir = "build";
 
@@ -52,6 +53,7 @@ async function copyAsset(assetPath) {
 }
 
 async function run() {
+  await ensureFirebaseConfig();
   await rm(outDir, { recursive: true, force: true });
   await mkdir(outDir, { recursive: true });
 

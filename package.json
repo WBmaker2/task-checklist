@@ -1,11 +1,12 @@
 {
   "name": "task-checklist",
-  "version": "2.0.1",
+  "version": "2.0.2",
   "description": "학급 업무 체크리스트 웹앱입니다.",
   "private": true,
   "scripts": {
     "build": "node scripts/build.mjs",
-    "serve": "python3 -m http.server 4174"
+    "serve": "python3 -m http.server 4174",
+    "build:pages": "node scripts/prepare-pages.mjs"
   },
   "repository": {
     "type": "git",
