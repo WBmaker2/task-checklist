@@ -1,6 +1,6 @@
 {
   "name": "task-checklist",
-  "version": "2.0.6",
+  "version": "2.0.9",
   "description": "학급 업무 체크리스트 웹앱입니다.",
   "private": true,
   "scripts": {
