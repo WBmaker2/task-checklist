@@ -1,5 +1,5 @@
 (function () {
-  const APP_VERSION = "v2.0.6";
+  const APP_VERSION = "v2.0.8";
   const { SAMPLE_TASKS, DEFAULT_CATEGORIES } = window.AppConstants;
   const T = window.AppTheme;
   const { load, save } = window.AppUtils;
@@ -253,15 +253,25 @@
           },
         );
 
+        const latest = await refreshServerMeta(user);
+        const nextVersion =
+          toVersion(result.version) ||
+          toVersion(latest?.version) ||
+          toVersion(syncMetaRef.current.baseVersion) ||
+          null;
+
         updateSyncMeta((prev) => ({
           ...prev,
           ownerUserId: user.id,
-          baseVersion: toVersion(result.version) || prev.baseVersion,
+          baseVersion: nextVersion || prev.baseVersion,
           dirty: false,
-          lastBackupAt: result.updatedAtClient || result.updatedAt || prev.lastBackupAt,
+          lastBackupAt:
+            result.updatedAtClient ||
+            result.updatedAt ||
+            latest?.updatedAtClient ||
+            latest?.updatedAt ||
+            prev.lastBackupAt,
         }));
-
-        await refreshServerMeta(user);
         setStatus({
           busy: false,
           level: "success",
