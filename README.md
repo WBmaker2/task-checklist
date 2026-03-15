@@ -10,7 +10,7 @@
 - `styles/main.css`: 원본 전역 스타일
 - `src/core/*`: 상수/테마/유틸/공통 컴포넌트/백업 서비스
 - `src/pages/*`: 화면 단위 컴포넌트
-- `src/config/supabase-config.js`: Supabase 연결 설정
+- `src/config/firebase-config.js`: dev/prod Firebase 연결 설정
 
 ## 개발/배포
 
@@ -24,7 +24,7 @@ npm run build
 
 ## 백업
 
-백업 기능은 **Supabase + Google OAuth**로 동작합니다.
+백업 기능은 **Firebase Authentication + Cloud Firestore**로 동작합니다.
 
 일반 사용자는 설정 입력 없이:
 - Google 로그인
@@ -37,65 +37,71 @@ npm run build
 - 로그인 시 서버 버전이 더 최신이면 다운로드(복원) 여부 확인
 - 서버 버전이 더 최신이면 일반 업로드 차단
 - 필요 시 `강제 업로드`로 서버 덮어쓰기 가능 (명시적 확인 필요)
-- 다른 기기 백업 감지: Realtime + 30초 폴링으로 상태 갱신
+- 다른 기기 백업 감지: Firestore 실시간 리스너 + 30초 폴링으로 상태 갱신
 
 ## 관리자 1회 설정
 
-### 1) Supabase 프로젝트 준비
+### 1) Firebase 프로젝트 준비
 
-1. Supabase 프로젝트 생성
-2. Auth > Providers > Google 활성화
-3. Auth > URL Configuration에서 사이트 URL/리다이렉트 URL 등록
+1. Firebase 프로젝트 생성
+2. Authentication > Sign-in method에서 Google 활성화
+3. Authentication > Settings > Authorized domains에 운영/개발 도메인 등록
+4. Firestore Database 생성
 
-### 2) 백업 테이블 생성
+### 2) Firestore Rules 적용
 
-SQL Editor에서 아래 실행:
+Firestore Rules에 아래를 적용합니다:
 
-```sql
-create table if not exists public.user_backups (
-  user_id uuid primary key references auth.users(id) on delete cascade,
-  tasks jsonb not null default '[]'::jsonb,
-  cats jsonb not null default '[]'::jsonb,
-  checks jsonb not null default '{}'::jsonb,
-  updated_at_client timestamptz,
-  updated_at timestamptz not null default now(),
-  version int not null default 1
-);
-
-alter table public.user_backups enable row level security;
-
-create policy "Users can read own backup"
-on public.user_backups for select
-to authenticated
-using (auth.uid() = user_id);
-
-create policy "Users can insert own backup"
-on public.user_backups for insert
-to authenticated
-with check (auth.uid() = user_id);
-
-create policy "Users can update own backup"
-on public.user_backups for update
-to authenticated
-using (auth.uid() = user_id)
-with check (auth.uid() = user_id);
+```txt
+rules_version = '2';
+service cloud.firestore {
+  match /databases/{database}/documents {
+    match /userBackups/{userId} {
+      allow read, write: if request.auth != null && request.auth.uid == userId;
+    }
+  }
+}
 ```
 
-`version` 컬럼은 동기화 충돌 방지용으로 사용됩니다. (백업 시 자동 증가)
+백업 문서는 `userBackups/{uid}` 경로에 저장됩니다.
+문서에는 `tasks`, `cats`, `checks`, `version`, `updatedAtClient`, `updatedAt` 필드가 들어갑니다.
 
-실시간 동기화 반응 속도를 높이려면 Supabase Dashboard > Database > Replication에서 `user_backups` 테이블을 포함해 주세요.
-미설정이어도 앱은 30초 폴링으로 최신 상태를 확인합니다.
+`version` 필드는 동기화 충돌 방지용으로 사용됩니다. (백업 시 자동 증가)
 
 ### 3) 앱 연결값 입력 (코드 1회)
 
-`src/config/supabase-config.js`에 프로젝트 URL/anon key를 입력합니다.
+`src/config/firebase-config.js`에 Firebase Web App 설정값을 입력합니다.
+이 저장소는 기본적으로:
+- `localhost`, `127.0.0.1` -> `dev`
+- 그 외 호스트 -> `prod`
+로 자동 선택합니다.
+
+로컬에서 강제로 환경을 바꾸려면 URL에 `?firebaseEnv=dev` 또는 `?firebaseEnv=prod`를 붙이면 됩니다.
 
 ```js
-window.SUPABASE_CONFIG = {
-  url: "https://YOUR_PROJECT.supabase.co",
-  anonKey: "YOUR_SUPABASE_ANON_KEY",
-  redirectTo: window.location.origin + window.location.pathname,
+window.FIREBASE_CONFIGS = {
+  dev: {
+    apiKey: "DEV_API_KEY",
+    authDomain: "DEV_PROJECT.firebaseapp.com",
+    projectId: "DEV_PROJECT_ID",
+    appId: "DEV_APP_ID",
+    storageBucket: "DEV_PROJECT.firebasestorage.app",
+    messagingSenderId: "DEV_MESSAGING_SENDER_ID",
+  },
+  prod: {
+    apiKey: "PROD_API_KEY",
+    authDomain: "PROD_PROJECT.firebaseapp.com",
+    projectId: "PROD_PROJECT_ID",
+    appId: "PROD_APP_ID",
+    storageBucket: "PROD_PROJECT.firebasestorage.app",
+    messagingSenderId: "PROD_MESSAGING_SENDER_ID",
+  },
 };
 ```
 
+현재 준비된 Firebase 프로젝트:
+- dev: `task-checklist-dev`
+- prod: `task-checklist-prod`
+
+운영 도메인은 `Authentication > Settings > Authorized domains`에 실제 서비스 도메인을 추가해야 합니다.
 이 값은 사용자 입력 UI에 노출되지 않으며, 배포 후 일반 사용자는 Google 로그인만 하면 됩니다.

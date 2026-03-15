@@ -427,7 +427,7 @@
       setStatus({ busy: true, message: "", conflict: false, conflictMeta: null });
       try {
         await window.BackupService.signInWithGoogle();
-        setStatus({ busy: false, level: "info", message: "Google 로그인 페이지로 이동합니다." });
+        setStatus({ busy: false, level: "info", message: "Google 로그인 창을 열었습니다." });
       } catch (error) {
         setStatus({ busy: false, level: "error", message: `로그인 실패: ${error.message}` });
       }

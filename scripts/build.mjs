@@ -5,7 +5,7 @@ import { transform } from "esbuild";
 const outDir = "build";
 
 const orderedSources = [
-  "src/config/supabase-config.js",
+  "src/config/firebase-config.js",
   "src/core/constants.js",
   "src/core/theme.js",
   "src/core/utils.js",
