@@ -23,10 +23,12 @@ Firebase 콘솔 설정에 들어가기 전에 아래 2가지를 먼저 정해야
 - Firebase Auth의 `signInWithRedirect()`는 브라우저의 third-party storage 제한 영향을 받을 수 있다.
 - Firebase 공식 문서상, `signInWithRedirect()`를 프로덕션에서 안정적으로 쓰려면 호스팅 방식에 맞는 추가 설정이 필요하다.
 
-권장:
+현재 이 프로젝트의 권장안:
 
-- 가능하면 Firebase Hosting 사용
-- 기존 호스팅을 유지한다면 `redirect` 대신 `popup`을 고려하거나, Firebase Auth redirect best practices를 반드시 따라야 한다.
+- Firebase Hosting 사용
+- `signInWithRedirect()` 사용
+
+기존 호스팅을 유지한다면 `redirect` 대신 `popup`을 고려하거나, Firebase Auth redirect best practices를 반드시 따라야 한다.
 
 ### 2. 로그인 방식을 무엇으로 할 것인가
 
@@ -35,9 +37,9 @@ Firebase 콘솔 설정에 들어가기 전에 아래 2가지를 먼저 정해야
 - `signInWithRedirect`
 - `signInWithPopup`
 
-권장:
+현재 이 프로젝트의 권장안:
 
-- 현재 앱 UX를 유지하려면 `signInWithRedirect`
+- 현재 앱 UX를 유지하면서 장기 안정성을 높이려면 `signInWithRedirect`
 - 단, 기존 호스팅을 유지할 경우에는 `signInWithPopup`이 구현과 운영이 더 단순할 수 있다.
 
 ## 2. Firebase 프로젝트 준비

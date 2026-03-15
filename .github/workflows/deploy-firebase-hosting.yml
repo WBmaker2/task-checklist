@@ -1,4 +1,4 @@
-name: Deploy GitHub Pages
+name: Deploy Firebase Hosting
 
 on:
   push:
@@ -7,20 +7,20 @@ on:
 
 permissions:
   contents: read
-  pages: write
-  id-token: write
 
 concurrency:
-  group: "pages"
+  group: "firebase-hosting-prod"
   cancel-in-progress: true
 
 jobs:
-  build:
+  deploy:
     runs-on: ubuntu-latest
     env:
       REQUIRE_FIREBASE_CONFIG: "true"
       FIREBASE_CONFIG_DEV_JSON: ${{ secrets.FIREBASE_CONFIG_DEV_JSON }}
       FIREBASE_CONFIG_PROD_JSON: ${{ secrets.FIREBASE_CONFIG_PROD_JSON }}
+      FIREBASE_ENV_HOSTS_DEV: ${{ secrets.FIREBASE_ENV_HOSTS_DEV }}
+      FIREBASE_ENV_HOSTS_PROD: ${{ secrets.FIREBASE_ENV_HOSTS_PROD }}
     steps:
       - name: Checkout
         uses: actions/checkout@v4
@@ -37,24 +37,13 @@ jobs:
       - name: Build app
         run: npm run build
 
-      - name: Prepare Pages artifact
-        run: npm run build:pages
+      - name: Prepare deployment artifact
+        run: npm run build:hosting
 
-      - name: Setup Pages
-        uses: actions/configure-pages@v5
-
-      - name: Upload artifact
-        uses: actions/upload-pages-artifact@v3
+      - name: Deploy to Firebase Hosting
+        uses: FirebaseExtended/action-hosting-deploy@v0
         with:
-          path: dist
-
-  deploy:
-    environment:
-      name: github-pages
-      url: ${{ steps.deployment.outputs.page_url }}
-    runs-on: ubuntu-latest
-    needs: build
-    steps:
-      - name: Deploy to GitHub Pages
-        id: deployment
-        uses: actions/deploy-pages@v4
+          repoToken: ${{ secrets.GITHUB_TOKEN }}
+          firebaseServiceAccount: ${{ secrets.FIREBASE_SERVICE_ACCOUNT_TASK_CHECKLIST_PROD }}
+          channelId: live
+          projectId: task-checklist-prod

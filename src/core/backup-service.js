@@ -1,11 +1,14 @@
 (function () {
   const BACKUP_COLLECTION = "userBackups";
   const DEFAULT_VERSION = 1;
+  const AUTH_REDIRECT_PENDING_KEY = "cc_auth_redirect_pending";
 
   let initialized = false;
   let app = null;
   let auth = null;
   let db = null;
+  let authBootstrapPromise = null;
+  let authBootstrapResult = null;
 
   function sanitizeConfig(config) {
     const c = config || {};
@@ -54,6 +57,7 @@
         auth.useDeviceLanguage();
       }
       initialized = true;
+      startAuthBootstrap({ ok: true, app, auth, db, config });
       return { ok: true, app, auth, db, config };
     } catch (error) {
       return { ok: false, code: "init-failed", message: error?.message || "초기화 실패" };
@@ -112,6 +116,76 @@
     return database.collection(BACKUP_COLLECTION).doc(userId);
   }
 
+  function canUseSessionStorage() {
+    try {
+      return typeof window.sessionStorage !== "undefined";
+    } catch (error) {
+      return false;
+    }
+  }
+
+  function setRedirectPending(value) {
+    if (!canUseSessionStorage()) {
+      return;
+    }
+
+    if (value) {
+      window.sessionStorage.setItem(AUTH_REDIRECT_PENDING_KEY, "1");
+      return;
+    }
+
+    window.sessionStorage.removeItem(AUTH_REDIRECT_PENDING_KEY);
+  }
+
+  function isRedirectPending() {
+    if (!canUseSessionStorage()) {
+      return false;
+    }
+    return window.sessionStorage.getItem(AUTH_REDIRECT_PENDING_KEY) === "1";
+  }
+
+  function toAuthMessage(level, message) {
+    return message ? { level, message } : null;
+  }
+
+  function startAuthBootstrap(state) {
+    if (authBootstrapResult) {
+      return Promise.resolve(authBootstrapResult);
+    }
+
+    if (authBootstrapPromise) {
+      return authBootstrapPromise;
+    }
+
+    const hadPendingRedirect = isRedirectPending();
+
+    authBootstrapPromise = state.auth
+      .getRedirectResult()
+      .then((result) => {
+        const user = normalizeUser(result?.user || state.auth.currentUser);
+        let feedback = null;
+        if (hadPendingRedirect && user) {
+          feedback = toAuthMessage("success", "Google 로그인되었습니다.");
+        } else if (hadPendingRedirect) {
+          feedback = toAuthMessage("warn", "로그인이 완료되지 않았습니다. 다시 시도해 주세요.");
+        }
+
+        authBootstrapResult = { user, feedback };
+        setRedirectPending(false);
+        return authBootstrapResult;
+      })
+      .catch((error) => {
+        authBootstrapResult = {
+          user: normalizeUser(state.auth.currentUser),
+          feedback: toAuthMessage("error", `로그인 실패: ${error?.message || "알 수 없는 오류"}`),
+        };
+        setRedirectPending(false);
+        return authBootstrapResult;
+      });
+
+    return authBootstrapPromise;
+  }
+
   async function getCurrentUser() {
     const state = ensureInitialized();
     if (!state.ok) {
@@ -133,16 +207,33 @@
     });
   }
 
+  async function awaitAuthBootstrap() {
+    const state = ensureInitialized();
+    if (!state.ok) {
+      return { user: null, feedback: null };
+    }
+
+    return startAuthBootstrap(state);
+  }
+
   async function signInWithGoogle() {
     const state = assertReady();
     const provider = new window.firebase.auth.GoogleAuthProvider();
     provider.setCustomParameters({ prompt: "select_account" });
+    setRedirectPending(true);
 
-    const result = await state.auth.signInWithPopup(provider);
-    return {
-      redirecting: false,
-      user: normalizeUser(result?.user || state.auth.currentUser),
-    };
+    try {
+      authBootstrapResult = null;
+      authBootstrapPromise = null;
+      await state.auth.signInWithRedirect(provider);
+      return {
+        redirecting: true,
+        user: null,
+      };
+    } catch (error) {
+      setRedirectPending(false);
+      throw error;
+    }
   }
 
   async function signOut() {
@@ -265,6 +356,7 @@
     getConfig,
     hasRequiredConfig,
     ensureInitialized,
+    awaitAuthBootstrap,
     getCurrentUser,
     onAuthStateChanged,
     signInWithGoogle,

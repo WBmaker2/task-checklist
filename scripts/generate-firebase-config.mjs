@@ -31,6 +31,29 @@ function sanitizeConfig(config) {
   };
 }
 
+function readHostList(name) {
+  return String(process.env[name] || "")
+    .split(",")
+    .map((value) => value.trim().toLowerCase())
+    .filter(Boolean);
+}
+
+function uniqueHosts(values) {
+  return Array.from(new Set(values.filter(Boolean)));
+}
+
+function buildDefaultHosts(config) {
+  const hosts = [];
+  if (config.authDomain) {
+    hosts.push(config.authDomain.toLowerCase());
+  }
+  if (config.projectId) {
+    hosts.push(`${config.projectId.toLowerCase()}.web.app`);
+    hosts.push(`${config.projectId.toLowerCase()}.firebaseapp.com`);
+  }
+  return uniqueHosts(hosts);
+}
+
 function missingKeys(config) {
   return requiredKeys.filter((key) => !config[key]);
 }
@@ -43,6 +66,8 @@ export async function ensureFirebaseConfig() {
   const dev = sanitizeConfig(readJson("FIREBASE_CONFIG_DEV_JSON"));
   const prod = sanitizeConfig(readJson("FIREBASE_CONFIG_PROD_JSON"));
   const requireConfig = String(process.env.REQUIRE_FIREBASE_CONFIG || "").trim().toLowerCase() === "true";
+  const devHosts = uniqueHosts([...buildDefaultHosts(dev), ...readHostList("FIREBASE_ENV_HOSTS_DEV")]);
+  const prodHosts = uniqueHosts([...buildDefaultHosts(prod), ...readHostList("FIREBASE_ENV_HOSTS_PROD")]);
 
   const devMissing = missingKeys(dev);
   const prodMissing = missingKeys(prod);
@@ -67,6 +92,14 @@ export async function ensureFirebaseConfig() {
     dev: ${toLiteral(dev)},
     prod: ${toLiteral(prod)},
   };
+  const HOSTS = {
+    dev: ${JSON.stringify(devHosts, null, 6)},
+    prod: ${JSON.stringify(prodHosts, null, 6)},
+  };
+
+  function normalizeHost(value) {
+    return String(value || "").trim().toLowerCase();
+  }
 
   function resolveFirebaseEnv() {
     const params = new URLSearchParams(window.location.search);
@@ -74,16 +107,36 @@ export async function ensureFirebaseConfig() {
     if (requested === "dev" || requested === "prod") {
       return requested;
     }
+    return "";
+  }
 
-    const hostname = (window.location.hostname || "").trim().toLowerCase();
-    return LOCAL_HOSTS.has(hostname) ? "dev" : "prod";
+  function resolveEnvFromHost(hostname) {
+    if (LOCAL_HOSTS.has(hostname)) {
+      return "dev";
+    }
+    if (HOSTS.dev.includes(hostname)) {
+      return "dev";
+    }
+    if (HOSTS.prod.includes(hostname)) {
+      return "prod";
+    }
+    return "prod";
   }
 
   const env = resolveFirebaseEnv();
+  const hostname = normalizeHost(window.location.hostname);
+  const resolvedEnv = env || resolveEnvFromHost(hostname);
+  const config = { ...CONFIGS[resolvedEnv] };
+  const knownHosts = HOSTS[resolvedEnv] || [];
 
-  window.FIREBASE_ENV = env;
+  if (knownHosts.includes(hostname) && hostname) {
+    config.authDomain = hostname;
+  }
+
+  window.FIREBASE_ENV = resolvedEnv;
+  window.FIREBASE_HOSTS = HOSTS;
   window.FIREBASE_CONFIGS = CONFIGS;
-  window.FIREBASE_CONFIG = { ...CONFIGS[env] };
+  window.FIREBASE_CONFIG = config;
 })();
 `;
 

@@ -1,0 +1,6 @@
+{
+  "projects": {
+    "dev": "task-checklist-dev",
+    "prod": "task-checklist-prod"
+  }
+}

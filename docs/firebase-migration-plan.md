@@ -107,7 +107,8 @@ Firebase Authentication에서 Google provider를 사용한다.
 
 이유:
 
-- 현재 앱이 정적 배포 환경 중심이고, 모바일/브라우저 정책 이슈를 줄이기 쉽다.
+- 현재 앱은 장기적으로 Firebase Hosting으로 옮겨 same-site redirect 구성을 맞추는 것이 가장 안정적이다.
+- 모바일/브라우저 정책 이슈를 줄이기 쉽다.
 - 현재 Supabase OAuth redirect 방식과 UX가 가장 유사하다.
 
 대응 함수:

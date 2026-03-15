@@ -7,9 +7,8 @@ async function run() {
   await cp("index.html", "dist/index.html");
   await cp("favicon.ico", "dist/favicon.ico");
   await cp("build", "dist/build", { recursive: true });
-  await writeFile("dist/.nojekyll", "", "utf8");
 
-  process.stdout.write("Prepared ./dist for GitHub Pages\n");
+  process.stdout.write("Prepared ./dist for deployment\n");
 }
 
 run().catch((error) => {

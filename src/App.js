@@ -1,5 +1,5 @@
 (function () {
-  const APP_VERSION = "v2.0.2";
+  const APP_VERSION = "v2.0.3";
   const { SAMPLE_TASKS, DEFAULT_CATEGORIES } = window.AppConstants;
   const T = window.AppTheme;
   const { load, save } = window.AppUtils;
@@ -334,11 +334,22 @@
         return undefined;
       }
 
-      window.BackupService.getCurrentUser().then(async (nextUser) => {
+      window.BackupService.awaitAuthBootstrap().then(async (bootstrap) => {
         if (!active) {
           return;
         }
 
+        if (bootstrap?.feedback) {
+          setStatus({
+            busy: false,
+            level: bootstrap.feedback.level || "info",
+            message: bootstrap.feedback.message || "",
+            conflict: false,
+            conflictMeta: null,
+          });
+        }
+
+        const nextUser = bootstrap?.user || (await window.BackupService.getCurrentUser());
         setSyncUser(nextUser || null);
         if (!nextUser) {
           setSyncServerMeta({ exists: false, updatedAtClient: null, updatedAt: null, version: null });
@@ -375,7 +386,12 @@
         setSyncUser(nextUser || null);
         if (!nextUser) {
           setSyncServerMeta({ exists: false, updatedAtClient: null, updatedAt: null, version: null });
-          setStatus({ level: "info", message: "", conflict: false, conflictMeta: null });
+          setStatus((prev) => ({
+            ...prev,
+            busy: false,
+            conflict: false,
+            conflictMeta: null,
+          }));
           promptKeyRef.current = null;
           return;
         }
@@ -486,8 +502,12 @@
     const login = async () => {
       setStatus({ busy: true, message: "", conflict: false, conflictMeta: null });
       try {
-        await window.BackupService.signInWithGoogle();
-        setStatus({ busy: false, level: "info", message: "Google 로그인 창을 열었습니다." });
+        const result = await window.BackupService.signInWithGoogle();
+        if (result?.redirecting) {
+          setStatus({ busy: false, level: "info", message: "Google 로그인 페이지로 이동합니다." });
+          return;
+        }
+        setStatus({ busy: false, level: "success", message: "Google 로그인되었습니다." });
       } catch (error) {
         setStatus({ busy: false, level: "error", message: `로그인 실패: ${error.message}` });
       }
