@@ -1,5 +1,5 @@
 (function () {
-  const APP_VERSION = "v2.0.4";
+  const APP_VERSION = "v2.0.5";
   const { SAMPLE_TASKS, DEFAULT_CATEGORIES } = window.AppConstants;
   const T = window.AppTheme;
   const { load, save } = window.AppUtils;

@@ -24,6 +24,7 @@ jobs:
       FIREBASE_CONFIG_PROD_JSON: ${{ secrets.FIREBASE_CONFIG_PROD_JSON }}
       FIREBASE_ENV_HOSTS_DEV: ${{ secrets.FIREBASE_ENV_HOSTS_DEV }}
       FIREBASE_ENV_HOSTS_PROD: ${{ secrets.FIREBASE_ENV_HOSTS_PROD }}
+      FIREBASE_SERVICE_ACCOUNT_TASK_CHECKLIST_PROD: ${{ secrets.FIREBASE_SERVICE_ACCOUNT_TASK_CHECKLIST_PROD }}
     steps:
       - name: Checkout
         uses: actions/checkout@v5
@@ -43,10 +44,10 @@ jobs:
       - name: Prepare deployment artifact
         run: npm run build:hosting
 
+      - name: Write Firebase service account
+        run: |
+          printf '%s' "$FIREBASE_SERVICE_ACCOUNT_TASK_CHECKLIST_PROD" > "$RUNNER_TEMP/firebase-service-account.json"
+          echo "GOOGLE_APPLICATION_CREDENTIALS=$RUNNER_TEMP/firebase-service-account.json" >> "$GITHUB_ENV"
+
       - name: Deploy to Firebase Hosting
-        uses: FirebaseExtended/action-hosting-deploy@v0
-        with:
-          repoToken: ${{ secrets.GITHUB_TOKEN }}
-          firebaseServiceAccount: ${{ secrets.FIREBASE_SERVICE_ACCOUNT_TASK_CHECKLIST_PROD }}
-          channelId: live
-          projectId: task-checklist-prod
+        run: npx firebase-tools deploy --only hosting --project task-checklist-prod --non-interactive
