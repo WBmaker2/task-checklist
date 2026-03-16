@@ -363,9 +363,9 @@
       tasks: Array.isArray(payload.tasks) ? payload.tasks : [],
       cats: Array.isArray(payload.cats) ? payload.cats : [],
       checks: payload.checks && typeof payload.checks === "object" ? payload.checks : {},
-      version: latest.version || nextVersion,
+      version: nextVersion,
       updatedAt: latest.updatedAt || latestKnown.updatedAt || null,
-      updatedAtClient: latest.updatedAtClient || latestKnown.updatedAtClient,
+      updatedAtClient: latestKnown.updatedAtClient,
     };
   }
 
