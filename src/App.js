@@ -1,5 +1,5 @@
 (function () {
-  const APP_VERSION = "v2.0.11";
+  const APP_VERSION = "v2.0.12";
   const { SAMPLE_TASKS, DEFAULT_CATEGORIES } = window.AppConstants;
   const T = window.AppTheme;
   const { load, save } = window.AppUtils;
@@ -255,8 +255,8 @@
 
         const latest = await refreshServerMeta(user);
         const nextVersion =
-          toVersion(latest?.version) ||
           toVersion(result.version) ||
+          toVersion(latest?.version) ||
           toVersion(syncMetaRef.current.baseVersion) ||
           null;
         const nextSyncMeta = normalizeSyncMeta({
@@ -265,10 +265,10 @@
           baseVersion: nextVersion || syncMetaRef.current.baseVersion,
           dirty: false,
           lastBackupAt:
-            latest?.updatedAtClient ||
-            latest?.updatedAt ||
             result.updatedAtClient ||
             result.updatedAt ||
+            latest?.updatedAtClient ||
+            latest?.updatedAt ||
             syncMetaRef.current.lastBackupAt,
         });
 
