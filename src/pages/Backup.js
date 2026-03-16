@@ -19,6 +19,7 @@
     const busy = Boolean(syncStatus && syncStatus.busy);
     const level = syncStatus?.level || "info";
     const styles = statusStyle(level);
+    const fileInputRef = React.useRef(null);
 
     return (
       <div>
@@ -48,6 +49,59 @@
             <div style={{ padding: "8px 12px", background: T.surfaceAlt, borderRadius: 10, fontSize: 12, color: T.text }}>
               체크 기록 {Object.keys(checks).length}개
             </div>
+          </div>
+
+          <div style={{ marginTop: 14, paddingTop: 14, borderTop: `1px solid ${T.border}` }}>
+            <div style={{ fontSize: 13, fontWeight: 700, color: T.text, marginBottom: 8 }}>로컬 파일 백업</div>
+            <div style={{ fontSize: 12, color: T.textMuted, marginBottom: 10 }}>
+              JSON 파일로 현재 기기 데이터를 저장하거나, 저장한 파일을 다시 불러올 수 있습니다.
+            </div>
+            <div style={{ display: "flex", gap: 8, flexWrap: "wrap" }}>
+              <button
+                onClick={actions.exportLocalData}
+                disabled={busy}
+                style={{
+                  padding: "10px 14px",
+                  borderRadius: 10,
+                  border: "none",
+                  background: "#0f766e",
+                  color: "#fff",
+                  fontWeight: 600,
+                  fontSize: 13,
+                  cursor: busy ? "not-allowed" : "pointer",
+                }}
+              >
+                로컬 내보내기
+              </button>
+
+              <button
+                onClick={() => fileInputRef.current && fileInputRef.current.click()}
+                disabled={busy}
+                style={{
+                  padding: "10px 14px",
+                  borderRadius: 10,
+                  border: `1px solid ${T.border}`,
+                  background: T.surface,
+                  color: T.text,
+                  fontWeight: 600,
+                  fontSize: 13,
+                  cursor: busy ? "not-allowed" : "pointer",
+                }}
+              >
+                로컬 가져오기
+              </button>
+            </div>
+            <input
+              ref={fileInputRef}
+              type="file"
+              accept="application/json,.json"
+              style={{ display: "none" }}
+              onChange={async (event) => {
+                const file = event.target.files && event.target.files[0];
+                await actions.importLocalData(file);
+                event.target.value = "";
+              }}
+            />
           </div>
         </div>
 

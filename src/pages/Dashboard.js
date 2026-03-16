@@ -1,7 +1,7 @@
 (function () {
   const { DAYS, PRIORITY_ORDER } = window.AppConstants;
   const T = window.AppTheme;
-  const { getToday, getWeekDates, fmtDate, shouldShow } = window.AppUtils;
+  const { getToday, getWeekDates, fmtDate, fmtDateKr, isWorkday, shouldShow } = window.AppUtils;
   const { ProgressRing, CheckItem } = window.AppComponents;
 
   function Dashboard({ tasks, cats, checks, onToggle }) {
@@ -44,6 +44,51 @@
     const tTotal = dayTasks.length;
     const tDone = dayTasks.filter((t) => checks[`${t.id}_${selStr}`]).length;
     const pending = dayTasks.filter((t) => !checks[`${t.id}_${selStr}`]);
+    const recoveryMap = new Map();
+
+    for (let offset = 1; offset <= 14; offset += 1) {
+      const target = new Date(realToday);
+      target.setDate(realToday.getDate() - offset);
+      if (!isWorkday(target)) {
+        continue;
+      }
+
+      const ds = fmtDate(target);
+      tasks.forEach((task) => {
+        if (!shouldShow(task, target) || checks[`${task.id}_${ds}`]) {
+          return;
+        }
+
+        const current = recoveryMap.get(task.id);
+        if (!current) {
+          recoveryMap.set(task.id, {
+            task,
+            date: ds,
+            label: fmtDateKr(target),
+            missedCount: 1,
+          });
+          return;
+        }
+
+        current.missedCount += 1;
+      });
+    }
+
+    const recoveryItems = Array.from(recoveryMap.values())
+      .sort((a, b) => {
+        const dateDiff = new Date(b.date).getTime() - new Date(a.date).getTime();
+        if (dateDiff !== 0) {
+          return dateDiff;
+        }
+
+        const countDiff = b.missedCount - a.missedCount;
+        if (countDiff !== 0) {
+          return countDiff;
+        }
+
+        return PRIORITY_ORDER[a.task.priority] - PRIORITY_ORDER[b.task.priority];
+      })
+      .slice(0, 5);
 
     const navDay = (dir) => {
       const d = new Date(selDate);
@@ -251,6 +296,37 @@
             })}
           </div>
         </div>
+
+        {recoveryItems.length > 0 && (
+          <div
+            style={{
+              background: T.surface,
+              borderRadius: 16,
+              padding: 20,
+              marginBottom: 24,
+              boxShadow: T.shadow,
+              border: `1px solid ${T.border}`,
+            }}
+          >
+            <h3 style={{ fontSize: 15, fontWeight: 700, margin: "0 0 8px", color: T.text }}>🩹 보완 추천 업무</h3>
+            <p style={{ fontSize: 12, color: T.textMuted, margin: "0 0 14px" }}>
+              최근 2주 동안 놓친 업무 중 각 업무의 가장 최근 미완료 1건을 모았습니다. 눌러서 바로 처리할 수 있습니다.
+            </p>
+            <div style={{ display: "flex", flexDirection: "column", gap: 8 }}>
+              {recoveryItems.map(({ task, date, label, missedCount }, index) => (
+                <CheckItem
+                  key={`${task.id}_${date}_recovery`}
+                  task={task}
+                  cat={cats.find((c) => c.id === task.categoryId)}
+                  checked={false}
+                  onToggle={() => onToggle(task.id, date)}
+                  showDate={missedCount > 1 ? `${label} · 최근 ${missedCount}회 미완료` : `${label} 미완료`}
+                  delay={index * 0.05}
+                />
+              ))}
+            </div>
+          </div>
+        )}
 
         {weekScopedTasks.length > 0 && (
           <div

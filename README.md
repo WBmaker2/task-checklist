@@ -20,13 +20,33 @@
 
 ```bash
 npm install
+npm run test:sync
 npm run build
 npm run build:hosting
 ```
 
+- `npm run test:sync`는 백업 버전 증가 / 충돌 차단 / 서버 최신 비교 관련 핵심 동기화 스모크 테스트를 실행합니다.
 - `npm run build` 실행 시 Firebase 설정 파일을 먼저 생성하고, `src/*.js`(JSX 포함)를 `build/src/*.js`로 사전 컴파일합니다.
 - `npm run build:hosting`은 `index.html`, `favicon.ico`, `build/*`를 `dist/`로 모아 Firebase Hosting 업로드용 아티팩트를 만듭니다.
 - 배포 시 `index.html`은 `build/*` 산출물만 로드하며, 브라우저 Babel(`babel-standalone`)을 사용하지 않습니다.
+
+## 릴리스 관리
+
+버전 번호는 `package.json`을 기준으로 관리합니다.
+
+```bash
+npm run release:patch -- "변경 요약"
+```
+
+- 위 명령은 patch 버전을 1 올리고, 아래 파일을 함께 동기화합니다.
+- `package.json`
+- `package-lock.json`
+- `src/App.js`의 앱 표시 버전
+- `index.html`의 배포용 캐시 버스터 쿼리
+- `CHANGELOG.md`의 새 버전 섹션
+
+필요하면 `release:minor`, `release:major`, `release:sync`도 사용할 수 있습니다.
+- `release:sync`: 현재 `package.json` 버전을 기준으로 표시 버전 / 캐시 버스터 / changelog만 맞춥니다.
 
 ## 백업
 
@@ -36,6 +56,7 @@ npm run build:hosting
 - Google 로그인
 - `지금 백업`
 - `백업 복원`
+- 로컬 JSON `내보내기 / 가져오기`
 만 사용하면 됩니다.
 
 추가 동기화 동작:
@@ -44,6 +65,7 @@ npm run build:hosting
 - 서버 버전이 더 최신이면 일반 업로드 차단
 - 필요 시 `강제 업로드`로 서버 덮어쓰기 가능 (명시적 확인 필요)
 - 다른 기기 백업 감지: Firestore 실시간 리스너 + 30초 폴링으로 상태 갱신
+- 로컬 JSON 가져오기는 현재 기기 데이터만 바꾸며, 이후 필요 시 클라우드에 다시 백업하면 됩니다.
 
 ## 관리자 1회 설정
 
