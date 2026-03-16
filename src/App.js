@@ -1,5 +1,5 @@
 (function () {
-  const APP_VERSION = "v2.0.10";
+  const APP_VERSION = "v2.0.11";
   const { SAMPLE_TASKS, DEFAULT_CATEGORIES } = window.AppConstants;
   const T = window.AppTheme;
   const { load, save } = window.AppUtils;
@@ -273,8 +273,7 @@
         });
 
         syncMetaRef.current = nextSyncMeta;
-        save(SYNC_META_KEY, nextSyncMeta);
-        setSyncMeta(nextSyncMeta);
+        updateSyncMeta(() => nextSyncMeta);
         setStatus({
           busy: false,
           level: "success",
