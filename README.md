@@ -152,5 +152,10 @@ Firebase Hosting으로 옮기면 기본 운영 URL은 GitHub Pages가 아니라 
 - `https://task-checklist-prod.web.app`
 - 또는 연결한 커스텀 도메인
 
+운영 배포를 마친 뒤에는 아래 원칙으로 안내합니다.
+
+- 배포 완료 메시지에 실제 접속 주소를 반드시 함께 적습니다.
+- 현재 기본 운영 접속 주소는 `https://task-checklist-prod.web.app/` 입니다.
+
 기존 `https://wbmaker2.github.io/task-checklist/` 주소는 Firebase Hosting으로 직접 대체할 수 없으므로,
 필요하면 별도 안내 또는 redirect 전략을 운영 측면에서 같이 준비해야 합니다.
