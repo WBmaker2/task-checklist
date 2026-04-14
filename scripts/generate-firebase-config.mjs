@@ -1,6 +1,7 @@
 import { mkdir, writeFile } from "node:fs/promises";
 import path from "node:path";
 import { pathToFileURL } from "node:url";
+import { loadEnvFiles } from "./load-env-files.mjs";
 
 const outputPath = path.join("src", "config", "firebase-config.js");
 const requiredKeys = ["apiKey", "authDomain", "projectId", "appId", "storageBucket", "messagingSenderId"];
@@ -63,6 +64,8 @@ function toLiteral(config) {
 }
 
 export async function ensureFirebaseConfig() {
+  await loadEnvFiles();
+
   const dev = sanitizeConfig(readJson("FIREBASE_CONFIG_DEV_JSON"));
   const prod = sanitizeConfig(readJson("FIREBASE_CONFIG_PROD_JSON"));
   const requireConfig = String(process.env.REQUIRE_FIREBASE_CONFIG || "").trim().toLowerCase() === "true";
@@ -120,7 +123,7 @@ export async function ensureFirebaseConfig() {
     if (HOSTS.prod.includes(hostname)) {
       return "prod";
     }
-    return "prod";
+    return "dev";
   }
 
   const env = resolveFirebaseEnv();

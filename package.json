@@ -5,14 +5,20 @@
   "private": true,
   "scripts": {
     "build": "node scripts/build.mjs",
-    "serve": "python3 -m http.server 4174",
-    "build:hosting": "node scripts/prepare-dist.mjs",
-    "build:pages": "node scripts/prepare-dist.mjs",
+    "build:strict": "REQUIRE_FIREBASE_CONFIG=true node scripts/build.mjs",
+    "serve": "npm run build && python3 -m http.server 4174",
+    "build:hosting": "npm run build:strict && node scripts/prepare-dist.mjs",
+    "build:pages": "npm run build:hosting",
+    "preview:hosting": "npm run build:hosting && python3 -m http.server 4175 --directory dist",
     "release:sync": "node scripts/release.mjs sync",
     "release:patch": "node scripts/release.mjs patch",
     "release:minor": "node scripts/release.mjs minor",
     "release:major": "node scripts/release.mjs major",
-    "test:sync": "node scripts/test-sync.mjs"
+    "test:sync": "node scripts/test-sync.mjs",
+    "test:firebase-config": "node scripts/test-firebase-config.mjs",
+    "test:build-mode": "node scripts/test-build-mode.mjs",
+    "test:env-file": "node scripts/test-env-file-support.mjs",
+    "test:preview-script": "node scripts/test-preview-script.mjs"
   },
   "repository": {
     "type": "git",

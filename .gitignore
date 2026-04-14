@@ -4,3 +4,5 @@ npm-debug.log*
 build/
 dist/
 src/config/firebase-config.js
+.env.local
+.env.*.local

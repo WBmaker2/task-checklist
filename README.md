@@ -20,15 +20,42 @@
 
 ```bash
 npm install
+cp .env.example .env.local
+# .env.local 값을 실제 Firebase 값으로 수정
+npm run test:env-file
+npm run test:build-mode
+npm run test:firebase-config
+npm run test:preview-script
 npm run test:sync
 npm run build
+```
+
+- `cp .env.example .env.local`로 로컬 Firebase 설정 파일 초안을 만들 수 있습니다.
+- `npm run test:env-file`는 ` .env.local ` 파일만으로 엄격 빌드와 배포용 아티팩트 생성이 가능한지 검증합니다.
+- `npm run test:build-mode`는 로컬 허용 빌드와 배포용 엄격 빌드가 각각 기대한 방식으로 동작하는지 검증합니다.
+- `npm run test:firebase-config`는 호스트별 Firebase 환경 선택 규칙(특히 미등록 호스트 안전 기본값)을 검증합니다.
+- `npm run test:preview-script`는 `preview:hosting` 진입점과 README preview 안내가 같이 유지되는지 검증합니다.
+- `npm run test:sync`는 백업 버전 증가 / 충돌 차단 / 서버 최신 비교 관련 핵심 동기화 스모크 테스트를 실행합니다.
+- `npm run build`는 로컬 확인용 빌드입니다. Firebase 환경변수가 비어 있어도 빌드는 진행되며, 누락 값은 경고와 함께 빈 값으로 남습니다.
+- `npm run build:strict`는 Firebase 환경변수가 모두 준비된 경우에만 통과하는 엄격 빌드입니다.
+- `npm run build:hosting`은 `build:strict`를 먼저 실행한 뒤 `index.html`, `favicon.ico`, `build/*`를 `dist/`로 모아 Firebase Hosting 업로드용 아티팩트를 만듭니다.
+- `npm run preview:hosting`은 `build:hosting`을 먼저 실행한 뒤 `dist/`를 기준으로 정적 서버를 띄웁니다. 기본 포트는 `4175`입니다.
+- 배포 시 `index.html`은 `build/*` 산출물만 로드하며, 브라우저 Babel(`babel-standalone`)을 사용하지 않습니다.
+- `npm run serve`는 항상 `npm run build`를 먼저 실행한 뒤 정적 서버를 띄웁니다.
+
+로컬에서는 셸 `export` 대신 ` .env.local ` 파일을 두면 됩니다. 명시적으로 넘긴 셸 환경변수는 ` .env.local `보다 우선합니다.
+
+배포 아티팩트가 필요할 때는 아래처럼 ` .env.local ` 또는 셸 환경변수를 먼저 준비한 뒤 실행합니다.
+
+```bash
 npm run build:hosting
 ```
 
-- `npm run test:sync`는 백업 버전 증가 / 충돌 차단 / 서버 최신 비교 관련 핵심 동기화 스모크 테스트를 실행합니다.
-- `npm run build` 실행 시 Firebase 설정 파일을 먼저 생성하고, `src/*.js`(JSX 포함)를 `build/src/*.js`로 사전 컴파일합니다.
-- `npm run build:hosting`은 `index.html`, `favicon.ico`, `build/*`를 `dist/`로 모아 Firebase Hosting 업로드용 아티팩트를 만듭니다.
-- 배포 시 `index.html`은 `build/*` 산출물만 로드하며, 브라우저 Babel(`babel-standalone`)을 사용하지 않습니다.
+호스팅용 결과물을 로컬에서 바로 확인하려면 아래 명령을 사용합니다.
+
+```bash
+npm run preview:hosting
+```
 
 ## 릴리스 관리
 
@@ -104,22 +131,30 @@ service cloud.firestore {
 기본 동작은:
 - `localhost`, `127.0.0.1` -> `dev`
 - dev/prod에 등록된 Hosting 도메인 -> 해당 env
-- 나머지 호스트 -> `prod`
+- 나머지(미등록) 호스트 -> `dev` (preview/review 배포에서 실수로 prod를 바라보지 않도록 안전 기본값)
 
 배포된 호스트가 dev/prod Hosting 도메인으로 인식되면,
 빌드에 들어 있던 `authDomain` 대신 현재 호스트명을 사용해 same-site redirect 로그인 구성을 우선합니다.
 
 로컬에서 강제로 환경을 바꾸려면 URL에 `?firebaseEnv=dev` 또는 `?firebaseEnv=prod`를 붙이면 됩니다.
 
-환경변수는 JSON 문자열 2개와 선택적인 호스트 목록 2개를 사용합니다:
+환경변수는 JSON 문자열 2개와 선택적인 호스트 목록 2개를 사용합니다. 가장 쉬운 방법은 저장소 루트에 ` .env.local `을 두는 것입니다:
+
+```bash
+cp .env.example .env.local
+```
+
+직접 셸에 넣고 싶다면 아래 형식을 사용할 수 있습니다:
 
 ```bash
 export FIREBASE_CONFIG_DEV_JSON='{"apiKey":"DEV_API_KEY","authDomain":"task-checklist-dev.firebaseapp.com","projectId":"task-checklist-dev","appId":"DEV_APP_ID","storageBucket":"task-checklist-dev.firebasestorage.app","messagingSenderId":"DEV_SENDER_ID"}'
 export FIREBASE_CONFIG_PROD_JSON='{"apiKey":"PROD_API_KEY","authDomain":"task-checklist-prod.firebaseapp.com","projectId":"task-checklist-prod","appId":"PROD_APP_ID","storageBucket":"task-checklist-prod.firebasestorage.app","messagingSenderId":"PROD_SENDER_ID"}'
 export FIREBASE_ENV_HOSTS_DEV='task-checklist-dev.web.app,task-checklist-dev.firebaseapp.com'
 export FIREBASE_ENV_HOSTS_PROD='task-checklist-prod.web.app,task-checklist-prod.firebaseapp.com'
-npm run build
+npm run build:hosting
 ```
+
+현재 ` .env.local ` 파서는 단순한 `KEY=VALUE` 형식, 선택적인 `export` 접두사, 한 줄짜리 따옴표 값만 지원합니다. JSON 문자열은 예시처럼 작은따옴표로 감싸는 방식을 권장합니다.
 
 운영에서 커스텀 도메인을 쓰면 `FIREBASE_ENV_HOSTS_PROD`에 함께 추가합니다.
 
