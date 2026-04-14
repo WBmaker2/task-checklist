@@ -38,8 +38,20 @@ jobs:
       - name: Install dependencies
         run: npm ci
 
-      - name: Build app
-        run: npm run build
+      - name: Verify build modes
+        run: npm run test:build-mode
+
+      - name: Verify local env file support
+        run: npm run test:env-file
+
+      - name: Verify Firebase host selection
+        run: npm run test:firebase-config
+
+      - name: Verify preview entrypoint
+        run: npm run test:preview-script
+
+      - name: Verify sync smoke tests
+        run: npm run test:sync
 
       - name: Prepare deployment artifact
         run: npm run build:hosting
