@@ -89,6 +89,19 @@ async function run() {
   });
   assert.equal(parsedV2.tasks.length, 2);
   assert.equal(parsedV2.cats.length, 1);
+  assert.equal(parsedV2.checks["abc_def_2026-05-07"], "2026-05-07T00:00:00.000Z");
+
+  const parsedV1 = model.extractBackupPayload({
+    schemaVersion: 1,
+    data: {
+      tasks: normalized.tasks,
+      cats: normalized.cats,
+      checks: { "abc_def_2026-05-07": "2026-05-07T00:00:00.000Z" },
+    },
+  });
+  assert.equal(parsedV1.tasks.length, 2);
+  assert.equal(parsedV1.cats.length, 1);
+  assert.equal(parsedV1.checks["abc_def_2026-05-07"], "2026-05-07T00:00:00.000Z");
 
   const parsedLegacy = model.extractBackupPayload({
     tasks: normalized.tasks,

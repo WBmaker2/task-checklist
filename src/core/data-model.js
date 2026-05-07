@@ -132,7 +132,10 @@
 
   function extractBackupPayload(raw) {
     const root = asObject(raw);
-    const payload = root.schemaVersion === BACKUP_SCHEMA_VERSION && root.data ? root.data : root;
+    const rootData = asObject(root.data);
+    const hasDataPayload =
+      rootData.tasks !== undefined || rootData.cats !== undefined || rootData.checks !== undefined;
+    const payload = hasDataPayload ? rootData : root;
     return normalizeAppData(payload);
   }
 
