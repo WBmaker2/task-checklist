@@ -35,6 +35,10 @@
     return `${d.getMonth() + 1}월 ${d.getDate()}일`;
   }
 
+  function isSameDate(a, b) {
+    return Boolean(a && b && fmtDate(a) === fmtDate(b));
+  }
+
   function getMonthWeeks(year, month) {
     const weeks = [];
     const last = new Date(year, month + 1, 0).getDate();
@@ -71,7 +75,6 @@
     }
 
     const mapped = dow === 0 ? 6 : dow - 1;
-    const wn = getWeekNumber(date);
 
     if (task.repeatType === "daily") {
       return true;
@@ -81,9 +84,9 @@
       return true;
     }
 
-    // Monthly tasks are keyed by week-of-month only.
-    if (task.repeatType === "monthly" && task.repeatWeek === wn) {
-      return true;
+    if (task.repeatType === "monthly") {
+      const anchor = getFirstWorkdayOfMonthWeek(date.getFullYear(), date.getMonth(), task.repeatWeek);
+      return isSameDate(anchor, date);
     }
 
     return false;

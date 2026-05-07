@@ -78,6 +78,7 @@ npm run release:patch -- "변경 요약"
 ## 백업
 
 백업 기능은 **Firebase Authentication + Cloud Firestore**로 동작합니다.
+월간 업무의 N주차는 매월 1~7일, 8~14일, 15~21일, 22~28일, 29일~말일 구간을 의미합니다. 해당 구간의 첫 근무일에 한 번 표시됩니다.
 
 일반 사용자는 설정 입력 없이:
 - Google 로그인

@@ -19,6 +19,7 @@
     "test:data-model": "node scripts/test-data-model.mjs",
     "test:firebase-config": "node scripts/test-firebase-config.mjs",
     "test:build-mode": "node scripts/test-build-mode.mjs",
+    "test:schedule": "node scripts/test-schedule-rules.mjs",
     "test:env-file": "node scripts/test-env-file-support.mjs",
     "test:preview-script": "node scripts/test-preview-script.mjs"
   },
