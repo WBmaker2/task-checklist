@@ -174,6 +174,12 @@
       throw new Error("백업 파일에서 유효한 데이터 항목이 손실되어 있어 불러올 수 없습니다.");
     }
 
+    const sourceChecksCount = Object.keys(source.checks).length;
+    const normalizedChecksCount = Object.keys(payload.checks || {}).length;
+    if (sourceChecksCount > 0 && normalizedChecksCount !== sourceChecksCount) {
+      throw new Error("백업 파일의 체크 기록이 손상되어 있어 불러올 수 없습니다.");
+    }
+
     return payload;
   }
 

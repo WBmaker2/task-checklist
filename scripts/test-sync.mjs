@@ -482,6 +482,13 @@ async function testImportLocalDataRejectsMalformedPayload() {
         checks: {},
       },
     },
+    {
+      data: {
+        tasks: [{ id: "t1", name: "업무1" }],
+        cats: [{ id: "cat-a", name: "수업" }],
+        checks: { "unknown-task_2026-05-07": "2026-05-07" },
+      },
+    },
   ];
 
   for (const payload of invalidPayloads) {
@@ -539,6 +546,78 @@ async function testImportLocalDataRejectsMalformedPayload() {
   }
 }
 
+async function testImportLocalDataAcceptsValidChecks() {
+  const payload = {
+    data: {
+      tasks: [
+        {
+          id: "task-1",
+          name: "업무1",
+          categoryId: "cat-a",
+          repeatType: "weekly",
+          repeatDay: 1,
+          repeatWeek: 1,
+          priority: "medium",
+        },
+      ],
+      cats: [{ id: "cat-a", name: "수업" }],
+      checks: { "task-1_2026-05-07": "2026-05-07T00:00:00.000Z" },
+    },
+  };
+
+  const context = createFakeSyncControllerContext();
+  context.window.confirmCalls = 0;
+  context.window.confirm = () => {
+    context.window.confirmCalls += 1;
+    return true;
+  };
+
+  await loadBrowserScript("src/core/data-model.js", context);
+  await loadBrowserScript("src/core/sync-state.js", context);
+  await loadBrowserScript("src/core/account-boundary.js", context);
+  await loadBrowserScript("src/core/sync-controller.js", context);
+
+  let taskSetCount = 0;
+  let catSetCount = 0;
+  let checkSetCount = 0;
+
+  const controller = context.window.AppSyncController.useSyncController({
+    tasks: [],
+    cats: [{ id: "cat-a", name: "카테고리", color: "#1d4ed8", icon: "📝" }],
+    checks: {},
+    setTasks() {
+      taskSetCount += 1;
+    },
+    setCats() {
+      catSetCount += 1;
+    },
+    setChecks() {
+      checkSetCount += 1;
+    },
+    theme: {
+      bg: "#fff",
+      surface: "#fff",
+      surfaceAlt: "#eee",
+      text: "#111",
+      textMuted: "#777",
+      border: "#ddd",
+      accent: "#0f766e",
+      shadow: "none",
+    },
+  });
+
+  await controller.backupActions.importLocalData({
+    async text() {
+      return JSON.stringify(payload);
+    },
+  });
+
+  assert.equal(taskSetCount, 1);
+  assert.equal(catSetCount, 1);
+  assert.equal(checkSetCount, 1);
+  assert.equal(context.window.confirmCalls, 1);
+}
+
 async function run() {
   await testBackupUsesTransactionVersion();
   await testBackupConflictStillBlocksOldBaseVersion();
@@ -546,6 +625,7 @@ async function run() {
   await testSyncControllerInitializationGuard();
   await testLegacySyncMetaInitializationBlocksBackupPath();
   await testImportLocalDataRejectsMalformedPayload();
+  await testImportLocalDataAcceptsValidChecks();
   await testBackupWritesSchemaVersionTwoPayload();
   await testRestoreReadsLegacyPayload();
   process.stdout.write("Sync smoke tests passed\n");
