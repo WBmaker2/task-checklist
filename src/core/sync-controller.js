@@ -131,6 +131,13 @@
     const autoTimerRef = React.useRef(null);
     const promptKeyRef = React.useRef(null);
 
+    const setStatus = React.useCallback((patchOrUpdater) => {
+      setSyncStatus((prev) => {
+        const patch = typeof patchOrUpdater === "function" ? patchOrUpdater(prev) : patchOrUpdater;
+        return { ...prev, ...(patch || {}) };
+      });
+    }, []);
+
     const updateSyncMeta = React.useCallback((updater) => {
       setSyncMeta((prev) => {
         const nextRaw = typeof updater === "function" ? updater(prev) : { ...prev, ...(updater || {}) };
@@ -217,13 +224,6 @@
     React.useEffect(() => {
       syncUserRef.current = syncUser;
     }, [syncUser]);
-
-    const setStatus = React.useCallback((patchOrUpdater) => {
-      setSyncStatus((prev) => {
-        const patch = typeof patchOrUpdater === "function" ? patchOrUpdater(prev) : patchOrUpdater;
-        return { ...prev, ...(patch || {}) };
-      });
-    }, []);
 
     const markLocalDirty = React.useCallback(() => {
       const now = new Date().toISOString();
