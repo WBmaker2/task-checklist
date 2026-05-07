@@ -103,13 +103,19 @@
       throw new Error("백업 파일 형식이 올바르지 않습니다.");
     }
 
+    const source = raw && typeof raw.data === "object" && raw.data !== null && !Array.isArray(raw.data) ? raw.data : raw;
     const hasExpectedShape =
-      ("tasks" in raw && Array.isArray(raw.tasks)) ||
-      ("cats" in raw && Array.isArray(raw.cats)) ||
-      ("checks" in raw && raw.checks && typeof raw.checks === "object") ||
-      ("data" in raw && raw.data && typeof raw.data === "object");
+      Object.prototype.hasOwnProperty.call(source, "tasks") &&
+      Object.prototype.hasOwnProperty.call(source, "cats") &&
+      Object.prototype.hasOwnProperty.call(source, "checks") &&
+      Array.isArray(source.tasks) &&
+      Array.isArray(source.cats) &&
+      source.checks &&
+      typeof source.checks === "object" &&
+      !Array.isArray(source.checks);
+
     if (!hasExpectedShape) {
-      throw new Error("백업 파일 형식이 올바르지 않습니다.");
+      throw new Error("업무/카테고리/체크 기록 형식을 확인해 주세요.");
     }
 
     if (!window.AppDataModel || typeof window.AppDataModel.extractBackupPayload !== "function") {

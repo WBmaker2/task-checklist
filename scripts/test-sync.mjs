@@ -407,11 +407,74 @@ async function testSyncControllerInitializationGuard() {
   assert.equal(typeof result.backupActions.claimLocalDataForCurrentUser, "function");
 }
 
+async function testImportLocalDataRejectsMalformedPayload() {
+  const invalidPayloads = [
+    { data: { foo: "bar" } },
+    {},
+    123,
+  ];
+
+  for (const payload of invalidPayloads) {
+    const context = createFakeSyncControllerContext();
+    context.window.confirmCalls = 0;
+    context.window.confirm = () => {
+      context.window.confirmCalls += 1;
+      return true;
+    };
+
+    await loadBrowserScript("src/core/data-model.js", context);
+    await loadBrowserScript("src/core/sync-state.js", context);
+    await loadBrowserScript("src/core/account-boundary.js", context);
+    await loadBrowserScript("src/core/sync-controller.js", context);
+
+    let taskSetCount = 0;
+    let catSetCount = 0;
+    let checkSetCount = 0;
+
+    const controller = context.window.AppSyncController.useSyncController({
+      tasks: [{ id: "local-task", name: "로컬", categoryId: "cat-1", repeatType: "weekly", repeatDay: 0, repeatWeek: 1, priority: "medium" }],
+      cats: [{ id: "cat-1", name: "카테고리", color: "#1d4ed8", icon: "📝" }],
+      checks: {},
+      setTasks() {
+        taskSetCount += 1;
+      },
+      setCats() {
+        catSetCount += 1;
+      },
+      setChecks() {
+        checkSetCount += 1;
+      },
+      theme: {
+        bg: "#fff",
+        surface: "#fff",
+        surfaceAlt: "#eee",
+        text: "#111",
+        textMuted: "#777",
+        border: "#ddd",
+        accent: "#0f766e",
+        shadow: "none",
+      },
+    });
+
+    await controller.backupActions.importLocalData({
+      async text() {
+        return JSON.stringify(payload);
+      },
+    });
+
+    assert.equal(taskSetCount, 0);
+    assert.equal(catSetCount, 0);
+    assert.equal(checkSetCount, 0);
+    assert.equal(context.window.confirmCalls, 0);
+  }
+}
+
 async function run() {
   await testBackupUsesTransactionVersion();
   await testBackupConflictStillBlocksOldBaseVersion();
   await testSyncHelpersPreferFreshResultVersion();
   await testSyncControllerInitializationGuard();
+  await testImportLocalDataRejectsMalformedPayload();
   await testBackupWritesSchemaVersionTwoPayload();
   await testRestoreReadsLegacyPayload();
   process.stdout.write("Sync smoke tests passed\n");
