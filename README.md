@@ -26,6 +26,7 @@ npm run test:env-file
 npm run test:build-mode
 npm run test:firebase-config
 npm run test:preview-script
+npm run test:schedule
 npm run test:sync
 npm run build
 ```
@@ -35,6 +36,7 @@ npm run build
 - `npm run test:build-mode`는 로컬 허용 빌드와 배포용 엄격 빌드가 각각 기대한 방식으로 동작하는지 검증합니다.
 - `npm run test:firebase-config`는 호스트별 Firebase 환경 선택 규칙(특히 미등록 호스트 안전 기본값)을 검증합니다.
 - `npm run test:preview-script`는 `preview:hosting` 진입점과 README preview 안내가 같이 유지되는지 검증합니다.
+- `npm run test:schedule`는 월간 업무 규칙의 첫 근무일 표시 규칙(1~7일, 8~14일 등)을 회귀 검증합니다.
 - `npm run test:sync`는 백업 버전 증가 / 충돌 차단 / 서버 최신 비교 관련 핵심 동기화 스모크 테스트를 실행합니다.
 - `npm run build`는 로컬 확인용 빌드입니다. Firebase 환경변수가 비어 있어도 빌드는 진행되며, 누락 값은 경고와 함께 빈 값으로 남습니다.
 - `npm run build:strict`는 Firebase 환경변수가 모두 준비된 경우에만 통과하는 엄격 빌드입니다.

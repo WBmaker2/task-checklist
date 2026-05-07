@@ -50,6 +50,9 @@ jobs:
       - name: Verify preview entrypoint
         run: npm run test:preview-script
 
+      - name: Verify schedule rules
+        run: npm run test:schedule
+
       - name: Verify sync smoke tests
         run: npm run test:sync
 
