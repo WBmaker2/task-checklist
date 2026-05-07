@@ -15,6 +15,7 @@
     "release:minor": "node scripts/release.mjs minor",
     "release:major": "node scripts/release.mjs major",
     "test:sync": "node scripts/test-sync.mjs",
+    "test:data-model": "node scripts/test-data-model.mjs",
     "test:firebase-config": "node scripts/test-firebase-config.mjs",
     "test:build-mode": "node scripts/test-build-mode.mjs",
     "test:env-file": "node scripts/test-env-file-support.mjs",

@@ -10,6 +10,7 @@ const orderedSources = [
   "src/core/constants.js",
   "src/core/theme.js",
   "src/core/utils.js",
+  "src/core/data-model.js",
   "src/core/sync-state.js",
   "src/core/backup-service.js",
   "src/core/sync-controller.js",
