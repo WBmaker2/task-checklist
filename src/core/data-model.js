@@ -165,6 +165,23 @@
     return normalized.tasks.filter((task) => task.categoryId === normalizedCategoryId).length;
   }
 
+  function canDeleteCategory(appData, categoryId) {
+    const usage = getCategoryUsage(appData, categoryId);
+    if (usage > 0) {
+      return {
+        ok: false,
+        usage,
+        message: `이 카테고리를 사용하는 업무가 ${usage}개 있습니다.`,
+      };
+    }
+
+    return {
+      ok: true,
+      usage: 0,
+      message: "",
+    };
+  }
+
   window.AppDataModel = {
     BACKUP_SCHEMA_VERSION,
     normalizeAppData,
@@ -172,5 +189,6 @@
     toBackupDocument,
     deleteTaskFromAppData,
     getCategoryUsage,
+    canDeleteCategory,
   };
 })();

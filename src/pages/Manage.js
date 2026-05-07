@@ -4,7 +4,7 @@
   const { uid } = window.AppUtils;
   const { inputSt, labelSt, iconBtn, CatBadge, PriBadge, IconPicker } = window.AppComponents;
 
-  function Manage({ tasks, setTasks, cats, setCats }) {
+  function Manage({ tasks, setTasks, cats, setCats, checks, setChecks }) {
     const [editing, setEditing] = React.useState(null);
     const [showForm, setShowForm] = React.useState(false);
     const [showCF, setShowCF] = React.useState(false);
@@ -39,16 +39,28 @@
         return;
       }
 
+      const normalized = window.AppDataModel.normalizeAppData({
+        tasks: [{ ...form, id: editing || uid() }],
+        cats,
+        checks: {},
+      });
+      const nextTask = normalized.tasks[0];
+      if (!nextTask) {
+        return;
+      }
+
       if (editing) {
-        setTasks((p) => p.map((t) => (t.id === editing ? { ...form, id: editing } : t)));
+        setTasks((p) => p.map((t) => (t.id === editing ? nextTask : t)));
       } else {
-        setTasks((p) => [...p, { ...form, id: uid() }]);
+        setTasks((p) => [...p, nextTask]);
       }
       setShowForm(false);
     };
 
     const delTask = (id) => {
-      setTasks((p) => p.filter((t) => t.id !== id));
+      const nextData = window.AppDataModel.deleteTaskFromAppData({ tasks, cats, checks }, id);
+      setTasks(nextData.tasks);
+      setChecks(nextData.checks);
       if (editing === id) {
         setShowForm(false);
       }
@@ -65,6 +77,11 @@
 
     const delCat = (id) => {
       if (DEFAULT_CATEGORIES.find((c) => c.id === id)) {
+        return;
+      }
+      const result = window.AppDataModel.canDeleteCategory({ tasks, cats, checks }, id);
+      if (!result.ok) {
+        window.alert(`${result.message} 먼저 업무의 카테고리를 변경해 주세요.`);
         return;
       }
       setCats((p) => p.filter((c) => c.id !== id));

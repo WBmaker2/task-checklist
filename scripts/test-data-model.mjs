@@ -111,6 +111,37 @@ async function run() {
   assert.equal(parsedLegacy.tasks.length, 2);
   assert.equal(parsedLegacy.cats.length, 1);
 
+  const consistencyData = {
+    tasks: [
+      { id: "t1", name: "업무1", categoryId: "c1", repeatType: "daily", priority: "medium" },
+      { id: "t2", name: "업무2", categoryId: "c2", repeatType: "weekly", repeatDay: 1, priority: "low" },
+    ],
+    cats: [
+      { id: "c1", name: "Cat 1", color: "#111111", icon: "1" },
+      { id: "c2", name: "Cat 2", color: "#222222", icon: "2" },
+    ],
+    checks: {
+      "t1_2026-05-07": "2026-05-07T00:00:00.000Z",
+      "t2_2026-05-07": "2026-05-07T00:00:00.000Z",
+    },
+  };
+
+  const taskDeleted = model.deleteTaskFromAppData(consistencyData, "t1");
+  assert.equal(taskDeleted.tasks.length, 1);
+  assert.equal(taskDeleted.tasks.some((task) => task.id === "t1"), false);
+  assert.equal(taskDeleted.checks["t1_2026-05-07"], undefined);
+  assert.equal(taskDeleted.checks["t2_2026-05-07"], "2026-05-07T00:00:00.000Z");
+
+  const c1Usage = model.canDeleteCategory(consistencyData, "c1");
+  assert.equal(c1Usage.ok, false);
+  assert.equal(c1Usage.usage, 1);
+  assert.equal(c1Usage.message, `이 카테고리를 사용하는 업무가 ${c1Usage.usage}개 있습니다.`);
+
+  const unused = model.canDeleteCategory(consistencyData, "unused");
+  assert.equal(unused.ok, true);
+  assert.equal(unused.usage, 0);
+  assert.equal(unused.message, "");
+
   const usage = model.getCategoryUsage(
     {
       tasks: [

@@ -107,7 +107,9 @@
         <div style={{ maxWidth: 560, margin: "0 auto", padding: "20px 16px 100px" }}>
           {page === "dashboard" && <Dashboard tasks={tasks} cats={cats} checks={checks} onToggle={toggle} />}
           {page === "checklist" && <Checklist tasks={tasks} cats={cats} checks={checks} onToggle={toggle} />}
-          {page === "manage" && <Manage tasks={tasks} setTasks={setTasks} cats={cats} setCats={setCats} />}
+          {page === "manage" && (
+            <Manage tasks={tasks} setTasks={setTasks} cats={cats} setCats={setCats} checks={checks} setChecks={setChecks} />
+          )}
           {page === "stats" && <Stats tasks={tasks} cats={cats} checks={checks} />}
           {page === "backup" && (
             <Backup
