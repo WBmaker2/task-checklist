@@ -16,15 +16,27 @@
 
   function normalizeSyncMeta(raw) {
     const meta = raw && typeof raw === "object" ? raw : {};
+    const hasLegacyBoundaryFields =
+      !Object.prototype.hasOwnProperty.call(meta, "accountSwitchBlocked") &&
+      typeof meta.ownerUserId === "string" &&
+      meta.ownerUserId.length > 0 &&
+      meta.dirty === true;
+
     return {
       ownerUserId: typeof meta.ownerUserId === "string" ? meta.ownerUserId : null,
       baseVersion: toVersion(meta.baseVersion),
       dirty: Boolean(meta.dirty),
       localUpdatedAt: meta.localUpdatedAt || null,
       lastBackupAt: meta.lastBackupAt || null,
-      accountSwitchBlocked: Boolean(meta.accountSwitchBlocked),
+      accountSwitchBlocked: hasLegacyBoundaryFields ? true : Boolean(meta.accountSwitchBlocked),
       blockedPreviousOwnerUserId:
-        typeof meta.blockedPreviousOwnerUserId === "string" ? meta.blockedPreviousOwnerUserId : null,
+        hasLegacyBoundaryFields
+          ? typeof meta.ownerUserId === "string"
+            ? meta.ownerUserId
+            : null
+          : typeof meta.blockedPreviousOwnerUserId === "string"
+            ? meta.blockedPreviousOwnerUserId
+            : null,
     };
   }
 
@@ -122,7 +134,46 @@
       throw new Error("데이터 모델이 초기화되지 않았습니다.");
     }
 
+    function cleanImportString(value) {
+      if (typeof value !== "string") {
+        if (value == null) {
+          return "";
+        }
+        return String(value).trim();
+      }
+      return value.trim();
+    }
+
+    function canRestoreTask(task) {
+      const id = cleanImportString(task?.id);
+      const name = cleanImportString(task?.name);
+      return Boolean(id && name);
+    }
+
+    function canRestoreCat(cat) {
+      const name = cleanImportString(cat?.name);
+      return Boolean(name);
+    }
+
+    const sourceValidTaskCount = source.tasks.filter((task) => task && canRestoreTask(task)).length;
+    if (source.tasks.length > 0 && sourceValidTaskCount !== source.tasks.length) {
+      throw new Error("백업 파일에서 유효한 업무 항목이 손실되어 있어 불러올 수 없습니다.");
+    }
+
+    const sourceValidCatCount = source.cats.filter((cat) => cat && canRestoreCat(cat)).length;
+    if (source.cats.length > 0 && sourceValidCatCount !== source.cats.length) {
+      throw new Error("백업 파일에서 유효한 카테고리 항목이 손실되어 있어 불러올 수 없습니다.");
+    }
+
     const payload = window.AppDataModel.extractBackupPayload(raw);
+    if (source.tasks.length > 0 && payload.tasks.length !== sourceValidTaskCount) {
+      throw new Error("백업 파일에서 유효한 데이터 항목이 손실되어 있어 불러올 수 없습니다.");
+    }
+
+    if (source.cats.length > 0 && payload.cats.length !== sourceValidCatCount) {
+      throw new Error("백업 파일에서 유효한 데이터 항목이 손실되어 있어 불러올 수 없습니다.");
+    }
+
     return payload;
   }
 
@@ -821,5 +872,9 @@
 
   window.AppSyncController = {
     useSyncController,
+    __test: {
+      normalizeSyncMeta,
+      parseImportedBackup,
+    },
   };
 })();

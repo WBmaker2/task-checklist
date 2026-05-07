@@ -126,10 +126,13 @@ function createMockContext({ firestore }) {
   return context;
 }
 
-function createFakeSyncControllerContext() {
+function createFakeSyncControllerContext({ syncMeta } = {}) {
   const window = {
     AppUtils: {
-      load() {
+      load(key) {
+        if (key === "cc_sync_meta_v1") {
+          return syncMeta || null;
+        }
         return null;
       },
       save() {},
@@ -407,11 +410,78 @@ async function testSyncControllerInitializationGuard() {
   assert.equal(typeof result.backupActions.claimLocalDataForCurrentUser, "function");
 }
 
+async function testLegacySyncMetaInitializationBlocksBackupPath() {
+  const legacyMeta = {
+    ownerUserId: "user-legacy",
+    dirty: true,
+    baseVersion: 7,
+  };
+
+  const context = createFakeSyncControllerContext({ syncMeta: legacyMeta });
+  await loadBrowserScript("src/core/sync-state.js", context);
+  await loadBrowserScript("src/core/account-boundary.js", context);
+  await loadBrowserScript("src/core/sync-controller.js", context);
+
+  const controller = context.window.AppSyncController;
+  assert.equal(typeof controller.__test?.normalizeSyncMeta, "function");
+
+  const normalized = controller.__test.normalizeSyncMeta(legacyMeta);
+  assert.equal(normalized.accountSwitchBlocked, true);
+  assert.equal(normalized.blockedPreviousOwnerUserId, "user-legacy");
+
+  const syncController = controller.useSyncController({
+    tasks: [],
+    cats: [{ id: "cat-a", name: "기본", color: "#94a3b8", icon: "📌" }],
+    checks: {},
+    setTasks() {},
+    setCats() {},
+    setChecks() {},
+    theme: {
+      bg: "#fff",
+      surface: "#fff",
+      surfaceAlt: "#eee",
+      text: "#111",
+      textMuted: "#777",
+      border: "#ddd",
+      accent: "#0f766e",
+      shadow: "none",
+    },
+  });
+
+  assert.equal(syncController.syncMeta.accountSwitchBlocked, true);
+  assert.equal(
+    context.window.AppAccountBoundary.canScheduleAutoBackup({
+      serviceOk: true,
+      userId: "user-legacy",
+      ownerUserId: "user-legacy",
+      dirty: true,
+      serverAhead: false,
+      busy: false,
+      accountSwitchBlocked: syncController.syncMeta.accountSwitchBlocked,
+    }),
+    false
+  );
+}
+
 async function testImportLocalDataRejectsMalformedPayload() {
   const invalidPayloads = [
     { data: { foo: "bar" } },
     {},
     123,
+    {
+      data: {
+        tasks: [{ id: "bad" }],
+        cats: [{ id: "cat-a", name: "수업" }],
+        checks: {},
+      },
+    },
+    {
+      data: {
+        tasks: [{ id: "t1", name: "업무1" }],
+        cats: [{ id: "cat-a" }],
+        checks: {},
+      },
+    },
   ];
 
   for (const payload of invalidPayloads) {
@@ -474,6 +544,7 @@ async function run() {
   await testBackupConflictStillBlocksOldBaseVersion();
   await testSyncHelpersPreferFreshResultVersion();
   await testSyncControllerInitializationGuard();
+  await testLegacySyncMetaInitializationBlocksBackupPath();
   await testImportLocalDataRejectsMalformedPayload();
   await testBackupWritesSchemaVersionTwoPayload();
   await testRestoreReadsLegacyPayload();
