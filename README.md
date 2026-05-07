@@ -22,16 +22,20 @@
 npm install
 cp .env.example .env.local
 # .env.local 값을 실제 Firebase 값으로 수정
-npm run test:env-file
-npm run test:build-mode
-npm run test:firebase-config
-npm run test:preview-script
-npm run test:schedule
-npm run test:sync
+npm test
 npm run build
 ```
 
 - `cp .env.example .env.local`로 로컬 Firebase 설정 파일 초안을 만들 수 있습니다.
+- `npm test`는 아래 스크립트를 순서대로 실행해 로컬/CI 게이트 전체를 통과시킵니다.
+  - `npm run test:data-model`
+  - `npm run test:account-boundary`
+  - `npm run test:schedule`
+  - `npm run test:env-file`
+  - `npm run test:build-mode`
+  - `npm run test:firebase-config`
+  - `npm run test:preview-script`
+  - `npm run test:sync`
 - `npm run test:env-file`는 ` .env.local ` 파일만으로 엄격 빌드와 배포용 아티팩트 생성이 가능한지 검증합니다.
 - `npm run test:build-mode`는 로컬 허용 빌드와 배포용 엄격 빌드가 각각 기대한 방식으로 동작하는지 검증합니다.
 - `npm run test:firebase-config`는 호스트별 Firebase 환경 선택 규칙(특히 미등록 호스트 안전 기본값)을 검증합니다.
@@ -81,6 +85,9 @@ npm run release:patch -- "변경 요약"
 
 백업 기능은 **Firebase Authentication + Cloud Firestore**로 동작합니다.
 월간 업무의 N주차는 매월 1~7일, 8~14일, 15~21일, 22~28일, 29일~말일 구간을 의미합니다. 해당 구간의 첫 근무일에 한 번 표시됩니다.
+- 계정 전환 시에는 자동 백업이 잠기며, 사용자가 서버 복원 또는 로컬 데이터 연결 중 하나를 직접 선택해야 합니다.
+- 백업 문서는 `schemaVersion: 2` 형식을 사용하며, 기존 legacy top-level payload(`tasks`/`cats`/`checks`)는 읽기 전용 호환만 제공합니다.
+- 카테고리 삭제는 해당 카테고리에 할당된 업무가 있을 경우 차단됩니다.
 
 일반 사용자는 설정 입력 없이:
 - Google 로그인

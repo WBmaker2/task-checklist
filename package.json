@@ -4,6 +4,7 @@
   "description": "학급 업무 체크리스트 웹앱입니다.",
   "private": true,
   "scripts": {
+    "test": "npm run test:data-model && npm run test:account-boundary && npm run test:schedule && npm run test:env-file && npm run test:build-mode && npm run test:firebase-config && npm run test:preview-script && npm run test:sync",
     "build": "node scripts/build.mjs",
     "build:strict": "REQUIRE_FIREBASE_CONFIG=true node scripts/build.mjs",
     "serve": "npm run build && python3 -m http.server 4174",
