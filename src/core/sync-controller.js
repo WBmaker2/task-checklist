@@ -59,6 +59,16 @@
       };
     }
 
+    if (syncMeta?.accountSwitchBlocked) {
+      return {
+        label: "계정 확인 필요",
+        bg: "#fff7ed",
+        border: "#fed7aa",
+        color: "#9a3412",
+        dot: "#c2410c",
+      };
+    }
+
     if (serverAhead) {
       return {
         label: "서버 최신 감지",
