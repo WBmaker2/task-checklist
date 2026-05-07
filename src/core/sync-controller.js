@@ -99,21 +99,25 @@
   }
 
   function parseImportedBackup(raw) {
-    const root = raw && typeof raw === "object" ? raw : null;
-    if (!root) {
+    if (!raw || typeof raw !== "object") {
       throw new Error("백업 파일 형식이 올바르지 않습니다.");
     }
 
-    const payload = root.data && typeof root.data === "object" ? root.data : root;
-    const tasks = Array.isArray(payload.tasks) ? payload.tasks : null;
-    const cats = Array.isArray(payload.cats) ? payload.cats : null;
-    const checks = payload.checks && typeof payload.checks === "object" ? payload.checks : null;
-
-    if (!tasks || !cats || !checks) {
-      throw new Error("업무/카테고리/체크 기록 형식을 확인해 주세요.");
+    const hasExpectedShape =
+      ("tasks" in raw && Array.isArray(raw.tasks)) ||
+      ("cats" in raw && Array.isArray(raw.cats)) ||
+      ("checks" in raw && raw.checks && typeof raw.checks === "object") ||
+      ("data" in raw && raw.data && typeof raw.data === "object");
+    if (!hasExpectedShape) {
+      throw new Error("백업 파일 형식이 올바르지 않습니다.");
     }
 
-    return { tasks, cats, checks };
+    if (!window.AppDataModel || typeof window.AppDataModel.extractBackupPayload !== "function") {
+      throw new Error("데이터 모델이 초기화되지 않았습니다.");
+    }
+
+    const payload = window.AppDataModel.extractBackupPayload(raw);
+    return payload;
   }
 
   function useSyncController(options) {
@@ -661,15 +665,11 @@
     const exportLocalData = React.useCallback(() => {
       try {
         const exportedAt = new Date().toISOString();
+        const backupDocument = window.AppDataModel.toBackupDocument({ tasks, cats, checks });
         const payload = {
           format: "task-checklist-local-backup",
-          schemaVersion: 1,
           exportedAt,
-          data: {
-            tasks,
-            cats,
-            checks,
-          },
+          ...backupDocument,
         };
         const blob = new window.Blob([JSON.stringify(payload, null, 2)], { type: "application/json" });
         const url = window.URL.createObjectURL(blob);

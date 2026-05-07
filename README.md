@@ -119,7 +119,7 @@ service cloud.firestore {
 ```
 
 백업 문서는 `userBackups/{uid}` 경로에 저장됩니다.
-문서에는 `tasks`, `cats`, `checks`, `version`, `updatedAtClient`, `updatedAt` 필드가 들어갑니다.
+백업 문서는 `schemaVersion: 2, data.tasks, data.cats, data.checks, version, updatedAtClient, updatedAt` 필드를 사용합니다. 기존 top-level `tasks`/`cats`/`checks` 백업은 읽기 호환만 유지합니다.
 
 `version` 필드는 동기화 충돌 방지용으로 사용됩니다. (백업 시 자동 증가)
 

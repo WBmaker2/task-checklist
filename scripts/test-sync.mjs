@@ -32,6 +32,9 @@ function createMockFirestore(initialData, options = {}) {
         },
       };
     },
+    getStore() {
+      return store ? { ...store } : null;
+    },
     async runTransaction(handler) {
       let pendingWrite = null;
       const tx = {
@@ -218,6 +221,11 @@ async function loadBrowserScript(filePath, context) {
   vm.runInContext(source, context, { filename: filePath });
 }
 
+async function loadBackupService(context) {
+  await loadBrowserScript("src/core/data-model.js", context);
+  await loadBrowserScript("src/core/backup-service.js", context);
+}
+
 async function testBackupUsesTransactionVersion() {
   const firestore = createMockFirestore(
     {
@@ -236,7 +244,7 @@ async function testBackupUsesTransactionVersion() {
     }
   );
   const context = createMockContext({ firestore });
-  await loadBrowserScript("src/core/backup-service.js", context);
+  await loadBackupService(context);
 
   const result = await context.window.BackupService.backupUserData(
     "user-1",
@@ -255,7 +263,7 @@ async function testBackupConflictStillBlocksOldBaseVersion() {
     updatedAtClient: "2026-03-16T10:00:00.000Z",
   });
   const context = createMockContext({ firestore });
-  await loadBrowserScript("src/core/backup-service.js", context);
+  await loadBackupService(context);
 
   await assert.rejects(
     () =>
@@ -270,6 +278,91 @@ async function testBackupConflictStillBlocksOldBaseVersion() {
       return true;
     }
   );
+}
+
+async function testBackupWritesSchemaVersionTwoPayload() {
+  const firestore = createMockFirestore(null);
+  const context = createMockContext({ firestore });
+  await loadBackupService(context);
+
+  await context.window.BackupService.backupUserData(
+    "user-1",
+    {
+      tasks: [
+        {
+          id: "task-1",
+          name: "국어 수업",
+          categoryId: "cat-a",
+          repeatType: "weekly",
+          repeatDay: 2,
+          repeatWeek: 1,
+          priority: "high",
+          memo: "  발표 준비  ",
+        },
+      ],
+      cats: [
+        {
+          id: "cat-a",
+          name: "수업",
+          color: "#1d4ed8",
+          icon: "📝",
+        },
+      ],
+      checks: {
+        "task-1_2026-05-07": "2026-05-07T00:00:00.000Z",
+      },
+    },
+    {}
+  );
+
+  const store = firestore.getStore();
+  assert.equal(store.schemaVersion, 2);
+  assert.equal(Array.isArray(store.data.tasks), true);
+  assert.equal(store.data.tasks.length, 1);
+  assert.equal(store.data.cats.length, 1);
+  assert.equal(store.data.tasks[0].id, "task-1");
+  assert.equal(store.data.tasks[0].name, "국어 수업");
+  assert.equal(store.data.tasks[0].categoryId, "cat-a");
+  assert.equal(store.data.checks["task-1_2026-05-07"], "2026-05-07T00:00:00.000Z");
+}
+
+async function testRestoreReadsLegacyPayload() {
+  const firestore = createMockFirestore({
+    version: 3,
+    updatedAt: "2026-03-16T09:00:00.000Z",
+    updatedAtClient: "2026-03-16T09:00:00.000Z",
+    tasks: [
+      {
+        id: "legacy-task",
+        name: "Legacy",
+        categoryId: "legacy-cat",
+        repeatType: "daily",
+        repeatDay: 0,
+        repeatWeek: 1,
+        priority: "medium",
+      },
+    ],
+    cats: [
+      {
+        id: "legacy-cat",
+        name: "기본",
+        color: "#94a3b8",
+        icon: "📌",
+      },
+    ],
+    checks: {
+      "legacy-task_2026-03-16": "2026-03-16T09:00:00.000Z",
+    },
+  });
+  const context = createMockContext({ firestore });
+  await loadBackupService(context);
+
+  const restored = await context.window.BackupService.restoreUserData("user-1");
+  assert.equal(restored.version, 3);
+  assert.equal(restored.tasks.length, 1);
+  assert.equal(restored.tasks[0].name, "Legacy");
+  assert.equal(restored.cats[0].id, "legacy-cat");
+  assert.equal(restored.checks["legacy-task_2026-03-16"], "2026-03-16T09:00:00.000Z");
 }
 
 async function testSyncHelpersPreferFreshResultVersion() {
@@ -319,6 +412,8 @@ async function run() {
   await testBackupConflictStillBlocksOldBaseVersion();
   await testSyncHelpersPreferFreshResultVersion();
   await testSyncControllerInitializationGuard();
+  await testBackupWritesSchemaVersionTwoPayload();
+  await testRestoreReadsLegacyPayload();
   process.stdout.write("Sync smoke tests passed\n");
 }
 

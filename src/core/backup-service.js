@@ -319,11 +319,22 @@
 
   async function backupUserData(userId, payload, options) {
     const state = assertReady();
+    if (
+      !state ||
+      !window.AppDataModel ||
+      typeof window.AppDataModel.normalizeAppData !== "function" ||
+      typeof window.AppDataModel.toBackupDocument !== "function"
+    ) {
+      throw new Error("데이터 모델이 초기화되지 않았습니다.");
+    }
+
     const opts = options || {};
     const force = Boolean(opts.force);
     const baseVersion = normalizeVersion(opts.baseVersion);
     const now = new Date().toISOString();
     const docRef = getDocRef(state.db, userId);
+    const normalizedPayload = window.AppDataModel.normalizeAppData(payload || {});
+    const backupDocument = window.AppDataModel.toBackupDocument(normalizedPayload);
 
     let nextVersion = DEFAULT_VERSION;
     let latestKnown = { updatedAtClient: now, updatedAt: null };
@@ -349,9 +360,7 @@
       };
 
       tx.set(docRef, {
-        tasks: Array.isArray(payload.tasks) ? payload.tasks : [],
-        cats: Array.isArray(payload.cats) ? payload.cats : [],
-        checks: payload.checks && typeof payload.checks === "object" ? payload.checks : {},
+        ...backupDocument,
         updatedAtClient: now,
         updatedAt: window.firebase.firestore.FieldValue.serverTimestamp(),
         version: nextVersion,
@@ -360,9 +369,7 @@
 
     const latest = await fetchBackupMeta(userId);
     return {
-      tasks: Array.isArray(payload.tasks) ? payload.tasks : [],
-      cats: Array.isArray(payload.cats) ? payload.cats : [],
-      checks: payload.checks && typeof payload.checks === "object" ? payload.checks : {},
+      ...normalizedPayload,
       version: nextVersion,
       updatedAt: latest.updatedAt || latestKnown.updatedAt || null,
       updatedAtClient: latestKnown.updatedAtClient,
@@ -378,10 +385,13 @@
     }
 
     const data = snapshot.data() || {};
+    if (!window.AppDataModel || typeof window.AppDataModel.extractBackupPayload !== "function") {
+      throw new Error("데이터 모델이 초기화되지 않았습니다.");
+    }
+
+    const payload = window.AppDataModel.extractBackupPayload(data);
     return {
-      tasks: Array.isArray(data.tasks) ? data.tasks : [],
-      cats: Array.isArray(data.cats) ? data.cats : [],
-      checks: data.checks && typeof data.checks === "object" ? data.checks : {},
+      ...payload,
       updatedAtClient: data.updatedAtClient || null,
       updatedAt: toIso(data.updatedAt),
       version: normalizeVersion(data.version) || DEFAULT_VERSION,
