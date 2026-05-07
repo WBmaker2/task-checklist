@@ -83,6 +83,65 @@ async function run() {
   assert.equal(deleted.tasks[0].id, "noCheck");
   assert.equal(Object.keys(deleted.checks).length, 0);
 
+  const keepTask = {
+    id: "keep",
+    name: "유지 업무",
+    categoryId: "c1",
+    repeatType: "daily",
+    repeatDay: null,
+    repeatWeek: null,
+    priority: "medium",
+    extra: { note: "보존 대상" },
+  };
+  const removeTask = {
+    id: "remove",
+    name: "삭제 업무",
+    categoryId: "c1",
+    repeatType: "weekly",
+    repeatDay: 2,
+    repeatWeek: 1,
+    priority: "low",
+    customField: "custom",
+  };
+  const preserveCategory = { id: "c1", name: "카테고리" };
+  const preserveAppData = {
+    tasks: [keepTask, removeTask],
+    cats: [preserveCategory],
+    checks: {
+      "keep_2026-05-07": "2026-05-07T00:00:00.000Z",
+      "remove_2026-05-07": "2026-05-07T01:00:00.000Z",
+      "remove_2026-05-08": "2026-05-08T01:00:00.000Z",
+      "remove_2026-05-09_invalid": "2026-05-09T00:00:00.000Z",
+      "no_underscore": "2026-05-07T00:00:00.000Z",
+    },
+  };
+  const preserveOriginal = model.deleteTaskFromAppData(preserveAppData, " ");
+  assert.equal(preserveOriginal.tasks.length, 2);
+  assert.equal(preserveOriginal.tasks[0], keepTask);
+  assert.equal(preserveOriginal.tasks[1], removeTask);
+  assert.equal(preserveOriginal.cats[0], preserveCategory);
+  assert.equal(preserveOriginal.cats.length, 1);
+  assert.equal(preserveOriginal.checks["remove_2026-05-07"], "2026-05-07T01:00:00.000Z");
+  assert.equal(preserveOriginal.checks["remove_2026-05-08"], "2026-05-08T01:00:00.000Z");
+  assert.equal(preserveOriginal.checks["no_underscore"], "2026-05-07T00:00:00.000Z");
+  assert.equal(preserveOriginal.tasks.length, 2);
+
+  const preserveDeleted = model.deleteTaskFromAppData(preserveAppData, "remove");
+  assert.equal(preserveDeleted.tasks.length, 1);
+  assert.equal(preserveDeleted.tasks[0], keepTask);
+  assert.equal(preserveDeleted.cats[0], preserveCategory);
+  assert.equal(preserveDeleted.tasks[0].id, "keep");
+  assert.equal(preserveDeleted.tasks[0].repeatDay, null);
+  assert.equal(preserveDeleted.tasks[0].repeatWeek, null);
+  assert.equal(preserveDeleted.tasks[0].extra.note, "보존 대상");
+  assert.equal(preserveDeleted.tasks[0].name, "유지 업무");
+  assert.equal(preserveDeleted.cats.length, 1);
+  assert.equal(preserveDeleted.checks["keep_2026-05-07"], "2026-05-07T00:00:00.000Z");
+  assert.equal(preserveDeleted.checks["remove_2026-05-07"], undefined);
+  assert.equal(preserveDeleted.checks["remove_2026-05-08"], undefined);
+  assert.equal(preserveDeleted.checks["remove_2026-05-09_invalid"], "2026-05-09T00:00:00.000Z");
+  assert.equal(preserveDeleted.checks["no_underscore"], "2026-05-07T00:00:00.000Z");
+
   const parsedV2 = model.extractBackupPayload({
     schemaVersion: 2,
     data: normalized,

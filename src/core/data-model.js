@@ -147,15 +147,42 @@
   }
 
   function deleteTaskFromAppData(appData, taskId) {
-    const normalized = normalizeAppData(appData);
     const nextTaskId = cleanString(taskId);
+    const tasks = asArray(appData?.tasks);
+    const cats = asArray(appData?.cats);
+    const checks = asObject(appData?.checks);
+
     if (!nextTaskId) {
-      return normalized;
+      return {
+        tasks: [...tasks],
+        cats: [...cats],
+        checks: { ...checks },
+      };
     }
-    return normalizeAppData({
-      ...normalized,
-      tasks: normalized.tasks.filter((task) => task.id !== nextTaskId),
-    });
+
+    const nextTasks = tasks.filter((task) => task.id !== nextTaskId);
+    const nextChecks = {};
+
+    for (const [key, value] of Object.entries(checks)) {
+      const separatorIndex = key.lastIndexOf("_");
+      if (separatorIndex <= 0) {
+        nextChecks[key] = value;
+        continue;
+      }
+
+      const keyTaskId = key.slice(0, separatorIndex);
+      if (keyTaskId === nextTaskId) {
+        continue;
+      }
+
+      nextChecks[key] = value;
+    }
+
+    return {
+      tasks: nextTasks,
+      cats: [...cats],
+      checks: nextChecks,
+    };
   }
 
   function getCategoryUsage(appData, categoryId) {
