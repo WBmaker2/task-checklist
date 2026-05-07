@@ -12,6 +12,7 @@ const orderedSources = [
   "src/core/utils.js",
   "src/core/data-model.js",
   "src/core/sync-state.js",
+  "src/core/account-boundary.js",
   "src/core/backup-service.js",
   "src/core/sync-controller.js",
   "src/core/components.js",

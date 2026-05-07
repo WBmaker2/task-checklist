@@ -20,6 +20,7 @@
     const level = syncStatus?.level || "info";
     const styles = statusStyle(level);
     const fileInputRef = React.useRef(null);
+    const blockedByAccountSwitch = Boolean(user && syncMeta?.accountSwitchBlocked);
 
     return (
       <div>
@@ -164,6 +165,23 @@
             </div>
           )}
 
+          {blockedByAccountSwitch && (
+            <div
+              style={{
+                marginBottom: 12,
+                padding: "10px 12px",
+                borderRadius: 10,
+                background: "#fff7ed",
+                border: "1px solid #fed7aa",
+                color: "#9a3412",
+                fontSize: 12,
+              }}
+            >
+              계정이 전환되어 현재 로컬 데이터의 자동 백업이 중단되었습니다. 서버 데이터를 복원하거나
+              <strong> 「현재 로컬 데이터를 이 계정에 연결」</strong>을 선택해 주세요.
+            </div>
+          )}
+
           {user && serverAhead && (
             <div
               style={{
@@ -200,16 +218,16 @@
 
             <button
               onClick={actions.backupNow}
-              disabled={!user || busy || serverAhead}
+              disabled={!user || busy || serverAhead || blockedByAccountSwitch}
               style={{
                 padding: "10px 14px",
                 borderRadius: 10,
                 border: "none",
-                background: !user || serverAhead ? T.textMuted : T.accent,
+                background: !user || serverAhead || blockedByAccountSwitch ? T.textMuted : T.accent,
                 color: "#fff",
                 fontWeight: 600,
                 fontSize: 13,
-                cursor: !user || busy || serverAhead ? "not-allowed" : "pointer",
+                cursor: !user || busy || serverAhead || blockedByAccountSwitch ? "not-allowed" : "pointer",
               }}
             >
               지금 백업
@@ -217,19 +235,38 @@
 
             <button
               onClick={actions.forceBackupNow}
-              disabled={!user || busy || !meta?.exists}
+              disabled={!user || busy || !meta?.exists || blockedByAccountSwitch}
               style={{
                 padding: "10px 14px",
                 borderRadius: 10,
                 border: "none",
-                background: !user || !meta?.exists ? T.textMuted : "#b45309",
+                background:
+                  !user || !meta?.exists || blockedByAccountSwitch ? T.textMuted : "#b45309",
                 color: "#fff",
                 fontWeight: 600,
                 fontSize: 13,
-                cursor: !user || busy || !meta?.exists ? "not-allowed" : "pointer",
+                cursor:
+                  !user || busy || !meta?.exists || blockedByAccountSwitch ? "not-allowed" : "pointer",
               }}
             >
               강제 업로드
+            </button>
+
+            <button
+              onClick={actions.claimLocalDataForCurrentUser}
+              disabled={!user || busy || !blockedByAccountSwitch}
+              style={{
+                padding: "10px 14px",
+                borderRadius: 10,
+                border: `1px solid ${T.border}`,
+                background: blockedByAccountSwitch ? "#dcfce7" : T.surfaceAlt,
+                color: blockedByAccountSwitch ? "#166534" : T.textMuted,
+                fontWeight: 600,
+                fontSize: 13,
+                cursor: !user || busy || !blockedByAccountSwitch ? "not-allowed" : "pointer",
+              }}
+            >
+              현재 로컬 데이터를 이 계정에 연결
             </button>
 
             <button

@@ -9,6 +9,8 @@
     dirty: false,
     localUpdatedAt: null,
     lastBackupAt: null,
+    accountSwitchBlocked: false,
+    blockedPreviousOwnerUserId: null,
   };
   const EMPTY_SERVER_META = { exists: false, updatedAtClient: null, updatedAt: null, version: null };
 
@@ -20,6 +22,9 @@
       dirty: Boolean(meta.dirty),
       localUpdatedAt: meta.localUpdatedAt || null,
       lastBackupAt: meta.lastBackupAt || null,
+      accountSwitchBlocked: Boolean(meta.accountSwitchBlocked),
+      blockedPreviousOwnerUserId:
+        typeof meta.blockedPreviousOwnerUserId === "string" ? meta.blockedPreviousOwnerUserId : null,
     };
   }
 
@@ -135,6 +140,76 @@
       });
     }, []);
 
+    const handleOwnerTransition = React.useCallback((nextUser) => {
+      const nextUserId = nextUser && nextUser.id ? nextUser.id : null;
+      if (!window.AppAccountBoundary?.resolveOwnerTransition) {
+        if (nextUserId && syncMetaRef.current.ownerUserId !== nextUserId) {
+          if (!syncMetaRef.current.ownerUserId) {
+            updateSyncMeta((prev) => ({ ...prev, ownerUserId: nextUserId }));
+          } else {
+            updateSyncMeta((prev) => ({
+              ...prev,
+              ownerUserId: nextUserId,
+              baseVersion: null,
+              dirty: false,
+              accountSwitchBlocked: true,
+              blockedPreviousOwnerUserId: prev.ownerUserId,
+            }));
+            setStatus({
+              level: "warn",
+              conflict: true,
+              conflictMeta: {
+                previousOwnerUserId: prev.ownerUserId,
+                nextOwnerUserId: nextUserId,
+              },
+              message:
+                "다른 Google 계정으로 전환되었습니다. 현재 로컬 데이터를 이 계정에 연결할지, 서버 데이터를 복원할지 선택해 주세요.",
+            });
+          }
+        }
+        return null;
+      }
+
+      const transition = window.AppAccountBoundary.resolveOwnerTransition(syncMetaRef.current, nextUserId);
+      if (transition.kind === "signed-out" || transition.kind === "same-owner") {
+        return transition;
+      }
+
+      if (transition.kind === "claim-empty-owner") {
+        updateSyncMeta((prev) => ({
+          ...prev,
+          ownerUserId: transition.nextOwnerUserId,
+          accountSwitchBlocked: false,
+          blockedPreviousOwnerUserId: null,
+        }));
+        return transition;
+      }
+
+      if (transition.kind === "account-switch") {
+        updateSyncMeta((prev) => ({
+          ...prev,
+          ownerUserId: transition.nextOwnerUserId,
+          baseVersion: null,
+          dirty: false,
+          accountSwitchBlocked: true,
+          blockedPreviousOwnerUserId: transition.previousOwnerUserId,
+        }));
+
+        setStatus({
+          level: "warn",
+          conflict: true,
+          conflictMeta: {
+            previousOwnerUserId: transition.previousOwnerUserId,
+            nextOwnerUserId: transition.nextOwnerUserId,
+          },
+          message:
+            "다른 Google 계정으로 전환되었습니다. 현재 로컬 데이터를 이 계정에 연결할지, 서버 데이터를 복원할지 선택해 주세요.",
+        });
+      }
+
+      return transition;
+    }, [setStatus, updateSyncMeta]);
+
     React.useEffect(() => {
       syncMetaRef.current = syncMeta;
     }, [syncMeta]);
@@ -232,6 +307,8 @@
         dirty: false,
         localUpdatedAt: now,
         lastBackupAt: restored.updatedAtClient || restored.updatedAt || prev.lastBackupAt,
+        accountSwitchBlocked: false,
+        blockedPreviousOwnerUserId: null,
       }));
     }, [setTasks, setCats, setChecks, updateSyncMeta]);
 
@@ -279,6 +356,14 @@
       const user = syncUserRef.current;
       if (!user) {
         setStatus({ level: "warn", message: "먼저 Google 로그인해 주세요." });
+        return { ok: false };
+      }
+
+      if (syncMetaRef.current.accountSwitchBlocked) {
+        setStatus({
+          level: "warn",
+          message: "현재 계정 전환 상태입니다. 먼저 '현재 로컬 데이터를 이 계정에 연결' 또는 '백업 복원'으로 선택을 완료해 주세요.",
+        });
         return { ok: false };
       }
 
@@ -404,20 +489,7 @@
           return;
         }
 
-        updateSyncMeta((prev) => {
-          if (prev.ownerUserId && prev.ownerUserId !== nextUser.id) {
-            return {
-              ...prev,
-              ownerUserId: nextUser.id,
-              baseVersion: null,
-              dirty: true,
-            };
-          }
-          if (!prev.ownerUserId) {
-            return { ...prev, ownerUserId: nextUser.id };
-          }
-          return prev;
-        });
+        handleOwnerTransition(nextUser);
 
         const latest = await refreshServerMeta(nextUser);
         if (!active) {
@@ -444,20 +516,7 @@
           return;
         }
 
-        updateSyncMeta((prev) => {
-          if (prev.ownerUserId && prev.ownerUserId !== nextUser.id) {
-            return {
-              ...prev,
-              ownerUserId: nextUser.id,
-              baseVersion: null,
-              dirty: true,
-            };
-          }
-          if (!prev.ownerUserId) {
-            return { ...prev, ownerUserId: nextUser.id };
-          }
-          return prev;
-        });
+        handleOwnerTransition(nextUser);
 
         const latest = await refreshServerMeta(nextUser);
         if (!active) {
@@ -472,7 +531,7 @@
           unsubscribe();
         }
       };
-    }, [maybePromptNewerServerData, refreshServerMeta, setStatus, updateSyncMeta]);
+    }, [handleOwnerTransition, maybePromptNewerServerData, refreshServerMeta, setStatus]);
 
     React.useEffect(() => {
       if (!syncServiceState.ok || !syncUser) {
@@ -522,6 +581,22 @@
 
     const serverAhead = isServerAhead(syncServerMeta, syncMeta);
 
+    const canRunAutomaticBackup = React.useCallback(() => {
+      if (!window.AppAccountBoundary?.canScheduleAutoBackup) {
+        return false;
+      }
+
+      return window.AppAccountBoundary.canScheduleAutoBackup({
+        serviceOk: syncServiceState.ok,
+        userId: syncUser ? syncUser.id : null,
+        ownerUserId: syncMetaRef.current.ownerUserId,
+        dirty: syncMetaRef.current.dirty,
+        serverAhead,
+        busy: syncStatus.busy,
+        accountSwitchBlocked: syncMetaRef.current.accountSwitchBlocked,
+      });
+    }, [serverAhead, syncServiceState.ok, syncStatus.busy, syncUser]);
+
     React.useEffect(() => {
       if (autoTimerRef.current) {
         window.clearTimeout(autoTimerRef.current);
@@ -529,7 +604,7 @@
       }
       setAutoBackupDueAt(null);
 
-      if (!syncServiceState.ok || !syncUser || !syncMeta.dirty || serverAhead || syncStatus.busy) {
+      if (!canRunAutomaticBackup()) {
         return undefined;
       }
 
@@ -545,7 +620,7 @@
           autoTimerRef.current = null;
         }
       };
-    }, [syncServiceState.ok, syncUser, syncMeta.dirty, serverAhead, syncStatus.busy, performBackup]);
+    }, [canRunAutomaticBackup, syncMeta.dirty, syncMeta.accountSwitchBlocked, performBackup]);
 
     const login = React.useCallback(async () => {
       setStatus({ busy: true, message: "", conflict: false, conflictMeta: null });
@@ -657,6 +732,32 @@
       }
     }, [setTasks, setCats, setChecks, setStatus, updateSyncMeta]);
 
+    const claimLocalDataForCurrentUser = React.useCallback(() => {
+      const user = syncUserRef.current;
+      if (!user) {
+        setStatus({ level: "warn", message: "먼저 Google 로그인해 주세요." });
+        return;
+      }
+
+      const now = new Date().toISOString();
+      updateSyncMeta((prev) => ({
+        ...prev,
+        ownerUserId: user.id,
+        baseVersion: null,
+        dirty: true,
+        localUpdatedAt: now,
+        accountSwitchBlocked: false,
+        blockedPreviousOwnerUserId: null,
+      }));
+
+      setStatus({
+        level: "warn",
+        conflict: false,
+        conflictMeta: null,
+        message: "현재 로컬 데이터를 이 계정에 연결했습니다. 필요하면 지금 백업을 실행하세요.",
+      });
+    }, [setStatus, updateSyncMeta]);
+
     const backupActions = React.useMemo(() => ({
       login,
       logout,
@@ -672,7 +773,17 @@
       refreshMeta: () => refreshServerMeta(syncUserRef.current),
       exportLocalData,
       importLocalData,
-    }), [login, logout, performBackup, performRestore, refreshServerMeta, exportLocalData, importLocalData]);
+      claimLocalDataForCurrentUser,
+    }), [
+      login,
+      logout,
+      performBackup,
+      performRestore,
+      refreshServerMeta,
+      exportLocalData,
+      importLocalData,
+      claimLocalDataForCurrentUser,
+    ]);
 
     const syncIndicator = React.useMemo(
       () => buildSyncIndicator(theme, syncServiceState, syncUser, syncStatus, serverAhead, syncMeta),
